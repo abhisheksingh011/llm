@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which LLM will run on your laptop? — local model fit estimator</title>
+<meta name="description" content="Estimate which local language models fit your laptop, and how fast they'll generate. Runs entirely in your browser. Nothing is uploaded.">
+<!-- No external requests of any kind. The page previously pulled Space Grotesk
+     and IBM Plex from fonts.googleapis.com, which sends every visitor's IP and
+     User-Agent to Google and contradicts the "nothing is uploaded" line in the
+     masthead. The stacks below still name those faces first, so anyone who has
+     them installed gets the intended typography; everyone else gets a system
+     equivalent in the same role.
+     To restore the exact design without the third-party request: download the
+     woff2 files, drop them next to this page, and add @font-face rules here. -->
+<style>
+:root{
+  --paper:#E7EBEE; --panel:#F4F6F8; --ink:#16202B; --ink-soft:#4A5A69;
+  --rule:#C0CAD3; --rule-soft:#D6DEE4; --signal:#2B54C8;
+  --good:#1F6B4E; --tight:#9A6210; --no:#9E3418;
+
+  --font-display:"Space Grotesk",Futura,"Trebuchet MS","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:var(--font-body); font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--rule-soft) 1px,transparent 1px);
+  background-size:100% 32px; background-position:0 -1px;
+}
+.wrap{max-width:900px;margin:0 auto;padding:0 20px 96px}
+
+header.mast{padding:52px 0 28px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-soft);margin:0 0 14px}
+h1{font-family:var(--font-display);font-weight:700;
+  font-size:clamp(34px,6.5vw,58px);line-height:1.02;letter-spacing:-.025em;margin:0 0 16px}
+h1 em{font-style:normal;color:var(--signal)}
+.standfirst{font-size:17px;color:var(--ink-soft);max-width:58ch;margin:0 0 18px}
+.masthead-meta{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);
+  display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.masthead-meta a{color:var(--signal)}
+
+.step{border-bottom:1px solid var(--rule);padding:34px 0}
+.step[hidden]{display:none}
+.step-head{display:flex;gap:14px;align-items:baseline;margin-bottom:6px}
+.step-no{font-family:var(--font-mono);font-size:12px;color:var(--signal);
+  border:1px solid var(--signal);border-radius:2px;padding:1px 6px;flex:none}
+h2{font-family:var(--font-display);font-size:22px;letter-spacing:-.01em;margin:0;font-weight:700}
+.step-note{color:var(--ink-soft);font-size:14.5px;margin:2px 0 22px 46px;max-width:60ch}
+@media(max-width:600px){.step-note{margin-left:0}}
+
+.field{margin:0 0 26px}
+.field:last-child{margin-bottom:0}
+.flabel{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-soft);display:block;margin-bottom:9px}
+.bar{display:flex;flex-wrap:wrap;gap:6px}
+.opt{font:inherit;font-size:14.5px;background:var(--panel);color:var(--ink);
+  border:1px solid var(--rule);border-radius:3px;padding:9px 14px;cursor:pointer;
+  transition:background .12s,border-color .12s,color .12s}
+.opt:hover{border-color:var(--ink-soft)}
+.opt:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.opt[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.opt .sub{display:block;font-family:var(--font-mono);font-size:10.5px;opacity:.62;letter-spacing:.04em}
+.fnote{font-size:13.5px;color:var(--ink-soft);margin:9px 0 0;max-width:62ch}
+
+.oscards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:560px){.oscards{grid-template-columns:1fr}}
+.oscard{font:inherit;text-align:left;background:var(--panel);border:1px solid var(--rule);
+  border-radius:4px;padding:18px 16px;cursor:pointer;transition:.14s}
+.oscard:hover{border-color:var(--ink-soft)}
+.oscard:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.oscard[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.oscard b{font-family:var(--font-display);font-size:18px;display:block}
+.oscard span{font-size:13px;opacity:.7}
+
+.help{margin-top:9px}
+.help summary{font-family:var(--font-mono);font-size:11.5px;color:var(--signal);
+  cursor:pointer;list-style:none;display:inline-flex;gap:6px;align-items:center;
+  border-bottom:1px dotted var(--signal);padding-bottom:1px}
+.help summary::-webkit-details-marker{display:none}
+.help summary:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+.help summary::before{content:"?";display:inline-grid;place-items:center;width:14px;height:14px;
+  border:1px solid var(--signal);border-radius:50%;font-size:9.5px;line-height:1}
+.help[open] summary::before{content:"×"}
+.helpbody{margin-top:10px;background:var(--panel);border:1px solid var(--rule-soft);
+  border-left:3px solid var(--signal);border-radius:0 3px 3px 0;padding:14px 16px;font-size:14px}
+.helpbody ol{margin:0;padding-left:19px}
+.helpbody li{margin-bottom:5px}
+.helpbody li:last-child{margin-bottom:0}
+.helpbody .kbd{font-family:var(--font-mono);font-size:12.5px;background:#fff;
+  border:1px solid var(--rule);border-radius:3px;padding:1px 5px}
+.helpbody .tip{margin:10px 0 0;color:var(--ink-soft);font-size:13px;font-style:italic}
+.helpbody .match{width:100%;border-collapse:collapse;margin:12px 0 0;font-size:13.5px}
+.helpbody .match td{padding:6px 8px;border-top:1px solid var(--rule-soft);vertical-align:top}
+.helpbody .match td:first-child{color:var(--ink-soft);width:60%}
+.helpbody .match tr:first-child td{border-top:none}
+
+.meter-shell{position:sticky;bottom:0;background:var(--paper);padding:14px 0 18px;
+  border-top:1px solid var(--rule);margin-top:8px;z-index:5}
+.meter-top{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:7px}
+.meter-val{color:var(--ink);font-size:15px;letter-spacing:0}
+.meter{height:12px;background:var(--panel);border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--signal);width:0;transition:width .45s cubic-bezier(.2,.8,.3,1)}
+.cta{font-family:var(--font-display);font-weight:700;font-size:16px;
+  background:var(--signal);color:#fff;border:none;border-radius:3px;
+  padding:14px 26px;cursor:pointer;margin-top:20px;transition:.14s}
+.cta:hover{background:#1D3FA8}
+.cta:disabled{background:var(--rule);color:var(--ink-soft);cursor:not-allowed}
+.cta:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+
+#report[hidden]{display:none}
+.rpt-head{padding:44px 0 26px;border-bottom:2px solid var(--ink)}
+/* Was a second <h1>. Demoted to h2 for document outline, styling unchanged. */
+.rpt-title{font-family:var(--font-display);font-weight:700;
+  font-size:clamp(28px,5vw,42px);line-height:1.02;letter-spacing:-.025em;margin:0}
+.rig{font-family:var(--font-mono);font-size:13px;color:var(--ink-soft);
+  display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.rig span{background:var(--panel);border:1px solid var(--rule);border-radius:2px;padding:3px 9px}
+
+.budget{margin-top:24px;background:var(--ink);color:#fff;border-radius:4px;padding:20px 22px}
+.budget .l{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;opacity:.62;margin-bottom:8px}
+.bsplit{display:flex;gap:32px;flex-wrap:wrap}
+.bsplit .n{font-family:var(--font-display);font-size:38px;font-weight:700;line-height:1;letter-spacing:-.03em}
+.bsplit .cap{font-size:12px;opacity:.6;font-family:var(--font-mono);margin-top:5px}
+.budget p{margin:16px 0 0;font-size:14px;opacity:.82;max-width:62ch}
+
+.pick{border:2px solid var(--signal);border-radius:4px;padding:22px;margin:28px 0 34px;background:var(--panel)}
+.pick .l{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--signal);margin-bottom:6px}
+.pick h3{font-family:var(--font-display);font-size:26px;margin:0 0 8px;letter-spacing:-.02em}
+.pick p{margin:0;color:var(--ink-soft);font-size:15px}
+
+h3.sec{font-family:var(--font-display);font-size:15px;letter-spacing:.02em;
+  margin:34px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--ink)}
+.sec-note{font-size:13.5px;color:var(--ink-soft);margin:8px 0 16px}
+.empty{font-size:14px;color:var(--ink-soft);background:var(--panel);border:1px dashed var(--rule);
+  border-radius:3px;padding:16px;margin:0}
+
+.row{padding:16px 0;border-bottom:1px solid var(--rule-soft)}
+.row-top{display:flex;justify-content:space-between;gap:14px;align-items:baseline;flex-wrap:wrap}
+.row-name{font-family:var(--font-display);font-size:17px;font-weight:700}
+.row-name .q{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);font-weight:400;margin-left:7px}
+.row-speed{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
+.gauge{position:relative;height:9px;background:var(--panel);border:1px solid var(--rule);
+  border-radius:2px;margin:10px 0 9px;overflow:hidden;display:flex}
+.gauge i{display:block;height:100%;width:0;transition:width .6s cubic-bezier(.2,.8,.3,1)}
+.seg-gpu{background:var(--signal)}
+.seg-cpu{background:var(--tight)}
+.seg-over{background:var(--no);opacity:.3}
+.row-desc{font-size:14px;color:var(--ink-soft);margin:0}
+.verdict{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 7px;border-radius:2px;white-space:nowrap}
+.v-good{background:var(--good);color:#fff}
+.v-tight{background:var(--tight);color:#fff}
+.v-no{background:var(--panel);color:var(--no);border:1px solid var(--no)}
+.tags{margin:8px 0 0;display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.tag{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-soft);
+  border:1px solid var(--rule);border-radius:2px;padding:1px 6px}
+.tag.ed{border-style:dashed}
+.tag a{color:var(--signal);text-decoration:none}
+.split-note{font-size:12.5px;color:var(--tight);margin:7px 0 0;font-family:var(--font-mono)}
+.links{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin:11px 0 0;
+  font-size:13px;font-family:var(--font-mono)}
+.links a{color:var(--signal);text-decoration:none;border-bottom:1px solid transparent;
+  padding-bottom:1px;transition:border-color .12s}
+.links a:hover{border-bottom-color:var(--signal)}
+.links a::after{content:" ↗";opacity:.5}
+.links a:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+.links .rec{color:var(--ink-soft);margin-left:auto}
+.links .rec b{color:var(--ink)}
+@media(max-width:600px){.links .rec{margin-left:0;width:100%}}
+.cmd{display:flex;align-items:stretch;gap:0;margin:9px 0 0;border:1px solid var(--rule);
+  border-radius:3px;overflow:hidden;background:var(--panel);max-width:520px}
+.cmd code{font-family:var(--font-mono);font-size:12.5px;color:var(--ink);
+  padding:8px 11px;flex:1;overflow-x:auto;white-space:nowrap;line-height:1.5}
+.copy{font:inherit;font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;background:var(--ink);color:#fff;border:none;
+  padding:0 14px;cursor:pointer;flex:none}
+.copy:hover{background:var(--signal)}
+.copy:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
+
+.next{margin-top:38px;background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:22px}
+.next h4{font-family:var(--font-display);margin:0 0 10px;font-size:16px}
+.next ol{margin:0;padding-left:20px;font-size:14.5px;color:var(--ink-soft)}
+.next li{margin-bottom:7px}
+.restart{background:none;border:1px solid var(--rule);border-radius:3px;font:inherit;font-size:14px;
+  padding:10px 18px;cursor:pointer;margin-top:26px}
+.restart:hover{border-color:var(--ink)}
+.restart:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+/* methodology */
+.method{border-top:2px solid var(--ink);margin-top:64px;padding-top:32px}
+.method h2{margin-bottom:18px}
+.method h4{font-family:var(--font-display);font-size:15px;margin:26px 0 7px}
+.method p,.method li{font-size:14.5px;color:var(--ink-soft);max-width:70ch}
+.method p{margin:0 0 12px}
+.formula{font-family:var(--font-mono);font-size:13.5px;background:var(--panel);
+  border:1px solid var(--rule);border-left:3px solid var(--ink);border-radius:0 3px 3px 0;
+  padding:14px 16px;margin:0 0 14px;color:var(--ink);overflow-x:auto;white-space:pre;line-height:1.7}
+
+/* plain-language explainer */
+.plainhead{font-family:var(--font-display);font-size:19px;letter-spacing:-.01em;
+  margin:44px 0 10px;padding-bottom:9px;border-bottom:2px solid var(--ink)}
+.plainhead:focus{outline:none}
+.pl{position:relative;padding:22px 0 22px 52px;border-bottom:1px solid var(--rule-soft)}
+@media(max-width:600px){.pl{padding-left:0}}
+.pl-n{position:absolute;left:0;top:24px;font-family:var(--font-mono);font-size:12px;
+  color:var(--signal);border:1px solid var(--signal);border-radius:50%;
+  width:26px;height:26px;display:grid;place-items:center}
+@media(max-width:600px){.pl-n{position:static;display:inline-grid;margin-bottom:8px}}
+.pl h4{font-family:var(--font-display);font-size:18px;color:var(--ink);
+  margin:0 0 12px;letter-spacing:-.01em}
+.analogy{background:var(--panel);border:1px solid var(--rule-soft);
+  border-left:3px solid var(--signal);border-radius:0 3px 3px 0;padding:16px 18px;margin:0 0 14px}
+.analogy p{margin:0 0 10px;font-size:14.5px;color:var(--ink);max-width:66ch}
+.analogy p:last-child{margin-bottom:0}
+.analogy b{font-weight:600}
+.conseq{position:relative;padding-left:16px;border-left:2px solid var(--rule);
+  font-size:14.5px;color:var(--ink-soft);max-width:68ch;margin:0}
+.conseq b{color:var(--ink)}
+.method a{color:var(--signal)}
+.fmap{font-family:var(--font-mono);font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-soft);margin:0 0 6px}
+.limits{list-style:none;padding:0;margin:0}
+.limits li{border-top:1px solid var(--rule-soft);padding:14px 0}
+.limits b{color:var(--ink);font-family:var(--font-display);display:block;margin-bottom:3px;font-size:14.5px}
+.srctable{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+.srctable th{text-align:left;font-family:var(--font-mono);font-size:10.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);
+  padding:0 10px 8px 0;border-bottom:1px solid var(--ink);font-weight:400}
+.srctable td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule-soft);
+  vertical-align:top;color:var(--ink-soft)}
+.badge{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 6px;border-radius:2px;white-space:nowrap}
+.b-meas{background:var(--panel);border:1px solid var(--good);color:var(--good)}
+.b-calc{background:var(--panel);border:1px solid var(--signal);color:var(--signal)}
+.b-ed{background:var(--panel);border:1px dashed var(--ink-soft);color:var(--ink-soft)}
+
+footer{border-top:1px solid var(--rule);margin-top:56px;padding-top:24px;
+  font-size:13px;color:var(--ink-soft)}
+footer p{margin:0 0 8px;max-width:70ch}
+footer a{color:var(--signal)}
+.stamp{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.06em}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Local model fit estimator</p>
+  <h1>Which LLM will run<br><em>on your laptop?</em></h1>
+  <p class="standfirst">Answer a few questions about your machine — each one has instructions for finding the
+  answer, no terminal needed — and get an estimate of which models fit, how fast they'll generate, and what
+  each is suited to.</p>
+  <div class="masthead-meta">
+    <span class="stamp">Model data: <b id="stampDate">—</b></span>
+    <a href="#methodology" data-scroll="methodology">Methodology &amp; limits</a>
+    <span>Runs in your browser. Nothing is uploaded.</span>
+  </div>
+</header>
+
+<form id="form">
+
+<section class="step" id="s1">
+  <div class="step-head"><span class="step-no">01</span><h2>What kind of laptop is it?</h2></div>
+  <p class="step-note">This changes which questions and instructions you see next.</p>
+  <div class="oscards" role="group" aria-label="Operating system">
+    <button type="button" class="oscard" data-f="os" data-v="win" aria-pressed="false">
+      <b>Windows</b><span>Dell, HP, Lenovo, Asus…</span></button>
+    <button type="button" class="oscard" data-f="os" data-v="mac" aria-pressed="false">
+      <b>Mac</b><span>MacBook Air or Pro</span></button>
+    <button type="button" class="oscard" data-f="os" data-v="linux" aria-pressed="false">
+      <b>Linux</b><span>Ubuntu, Fedora, Arch…</span></button>
+  </div>
+</section>
+
+<section class="step" id="s2-mac" hidden>
+  <div class="step-head"><span class="step-no">02</span><h2>Your Mac's chip and memory</h2></div>
+  <p class="step-note">On Apple Silicon the processor and graphics share one pool of memory, so these two
+  answers decide almost everything.</p>
+
+  <div class="field">
+    <span class="flabel">Chip</span>
+    <div class="bar" role="group" aria-label="Chip">
+      <button type="button" class="opt" data-f="chip" data-v="intelnew" aria-pressed="false">Intel<span class="sub">2018–2020</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="intelold" aria-pressed="false">Intel<span class="sub">2017 or older</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m1" aria-pressed="false">M1</button>
+      <button type="button" class="opt" data-f="chip" data-v="m1pro" aria-pressed="false">M1 Pro</button>
+      <button type="button" class="opt" data-f="chip" data-v="m1max" aria-pressed="false">M1 Max</button>
+      <button type="button" class="opt" data-f="chip" data-v="m2" aria-pressed="false">M2</button>
+      <button type="button" class="opt" data-f="chip" data-v="m2pro" aria-pressed="false">M2 Pro</button>
+      <button type="button" class="opt" data-f="chip" data-v="m2max" aria-pressed="false">M2 Max</button>
+      <button type="button" class="opt" data-f="chip" data-v="m3" aria-pressed="false">M3</button>
+      <button type="button" class="opt" data-f="chip" data-v="m3pro" aria-pressed="false">M3 Pro</button>
+      <button type="button" class="opt" data-f="chip" data-v="m3max30" aria-pressed="false">M3 Max<span class="sub">30-core gpu</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m3max40" aria-pressed="false">M3 Max<span class="sub">40-core gpu</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m4" aria-pressed="false">M4</button>
+      <button type="button" class="opt" data-f="chip" data-v="m4pro" aria-pressed="false">M4 Pro</button>
+      <button type="button" class="opt" data-f="chip" data-v="m4max32" aria-pressed="false">M4 Max<span class="sub">32-core gpu</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m4max40" aria-pressed="false">M4 Max<span class="sub">40-core gpu</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m5" aria-pressed="false">M5</button>
+      <button type="button" class="opt" data-f="chip" data-v="m5pro" aria-pressed="false">M5 Pro</button>
+      <button type="button" class="opt" data-f="chip" data-v="m5max32" aria-pressed="false">M5 Max<span class="sub">32-core gpu</span></button>
+      <button type="button" class="opt" data-f="chip" data-v="m5max40" aria-pressed="false">M5 Max<span class="sub">40-core gpu</span></button>
+    </div>
+    <details class="help"><summary>Where do I find this?</summary>
+      <div class="helpbody">
+        <ol>
+          <li>Click the <span class="kbd">apple menu</span> in the top-left corner.</li>
+          <li>Choose <span class="kbd">About This Mac</span>.</li>
+          <li>Read the line labelled <span class="kbd">Chip</span> — for example "Apple M2 Pro".</li>
+        </ol>
+        <p class="tip">If that line says "Processor" and mentions Intel Core, choose Intel.</p>
+        <p class="tip"><b>Max chips only:</b> Max models come in two versions with different memory speeds,
+        up to 33% apart, so the GPU core count matters. In the same window click
+        <span class="kbd">More Info</span> → <span class="kbd">System Report</span> → <span class="kbd">Graphics/Displays</span>
+        to see the core count. If you can't find it, pick the lower one — it's the more common
+        configuration and keeps the estimate conservative.</p>
+      </div>
+    </details>
+  </div>
+
+  <div class="field">
+    <span class="flabel">Memory</span>
+    <div class="bar" role="group" aria-label="Memory">
+      <button type="button" class="opt" data-f="ram" data-v="8" aria-pressed="false">8 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="16" aria-pressed="false">16 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="18" aria-pressed="false">18 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="24" aria-pressed="false">24 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="32" aria-pressed="false">32 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="36" aria-pressed="false">36 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="48" aria-pressed="false">48 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="64" aria-pressed="false">64 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="96" aria-pressed="false">96 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="128" aria-pressed="false">128 GB</button>
+    </div>
+    <details class="help"><summary>Where do I find this?</summary>
+      <div class="helpbody">
+        <ol>
+          <li>Click the <span class="kbd">apple menu</span> → <span class="kbd">About This Mac</span>.</li>
+          <li>Read the line labelled <span class="kbd">Memory</span>.</li>
+        </ol>
+        <p class="tip">Same window as the chip, so you can read both at once.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="step" id="s2-pc" hidden>
+  <div class="step-head"><span class="step-no">02</span><h2>Your memory and graphics card</h2></div>
+  <p class="step-note">A graphics card with its own memory makes models run several times faster. Plenty of
+  laptops don't have one — smaller models still work well without.</p>
+
+  <div class="field">
+    <span class="flabel">Installed RAM</span>
+    <div class="bar" role="group" aria-label="Installed RAM">
+      <button type="button" class="opt" data-f="ram" data-v="4" aria-pressed="false">4 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="8" aria-pressed="false">8 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="12" aria-pressed="false">12 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="16" aria-pressed="false">16 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="24" aria-pressed="false">24 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="32" aria-pressed="false">32 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="64" aria-pressed="false">64 GB</button>
+      <button type="button" class="opt" data-f="ram" data-v="128" aria-pressed="false">128 GB</button>
+    </div>
+    <details class="help"><summary>Where do I find this?</summary>
+      <div class="helpbody">
+        <div data-os="win">
+          <ol>
+            <li>Press <span class="kbd">Windows</span> + <span class="kbd">I</span> to open Settings.</li>
+            <li>Go to <span class="kbd">System</span> → <span class="kbd">About</span>.</li>
+            <li>Under "Device specifications", read <span class="kbd">Installed RAM</span>.</li>
+          </ol>
+          <p class="tip">It may say "16.0 GB (15.8 GB usable)" — choose the first number.</p>
+        </div>
+        <div data-os="linux" hidden>
+          <ol>
+            <li>Open your <span class="kbd">Settings</span> app.</li>
+            <li>Go to <span class="kbd">About</span> or <span class="kbd">System Details</span>.</li>
+            <li>Read the <span class="kbd">Memory</span> line.</li>
+          </ol>
+          <p class="tip">Prefer a terminal? <span class="kbd">free -h</span> reports the same thing and changes nothing.</p>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="field">
+    <span class="flabel">Graphics card</span>
+    <div class="bar" role="group" aria-label="Graphics card series">
+      <button type="button" class="opt" data-f="series" data-v="none" aria-pressed="false">Built-in only<span class="sub">intel / amd graphics</span></button>
+      <button type="button" class="opt" data-f="series" data-v="n50" aria-pressed="false">NVIDIA RTX 50<span class="sub">5060–5090</span></button>
+      <button type="button" class="opt" data-f="series" data-v="n40" aria-pressed="false">NVIDIA RTX 40<span class="sub">4050–4090</span></button>
+      <button type="button" class="opt" data-f="series" data-v="n30" aria-pressed="false">NVIDIA RTX 30<span class="sub">3050–3080</span></button>
+      <button type="button" class="opt" data-f="series" data-v="amd" aria-pressed="false">AMD Radeon RX</button>
+      <button type="button" class="opt" data-f="series" data-v="desk" aria-pressed="false">Desktop card</button>
+      <button type="button" class="opt" data-f="series" data-v="other" aria-pressed="false">Not sure</button>
+    </div>
+    <p class="fnote">Most laptops have built-in graphics and no separate card — that's the common case, not a
+    problem. The exact card matters more than you'd expect: two cards with the same amount of memory can
+    differ by more than double in speed, so this can't be worked out from memory size alone.</p>
+    <details class="help"><summary>Where do I find this?</summary>
+      <div class="helpbody">
+        <div data-os="win">
+          <ol>
+            <li>Press <span class="kbd">Windows</span> + <span class="kbd">X</span> and choose <span class="kbd">Device Manager</span>.</li>
+            <li>Click the arrow next to <span class="kbd">Display adapters</span> to expand it.</li>
+            <li>Match the names you see below.</li>
+          </ol>
+          <table class="match">
+            <tr><td>NVIDIA GeForce RTX 50xx</td><td><b>NVIDIA RTX 50</b></td></tr>
+            <tr><td>NVIDIA GeForce RTX 40xx</td><td><b>NVIDIA RTX 40</b></td></tr>
+            <tr><td>NVIDIA GeForce RTX 30xx or GTX</td><td><b>NVIDIA RTX 30</b></td></tr>
+            <tr><td>AMD Radeon <b>RX</b> …</td><td><b>AMD Radeon RX</b></td></tr>
+            <tr><td>Intel UHD, Iris or Arc</td><td><b>Built-in only</b></td></tr>
+            <tr><td>AMD Radeon Graphics <i>(no RX)</i></td><td><b>Built-in only</b></td></tr>
+          </table>
+          <p class="tip">Two entries is normal — many laptops have built-in graphics plus a separate card.
+          If one is NVIDIA or Radeon RX, choose that. If the only entry is Intel or plain AMD Radeon
+          Graphics, <b>Built-in only</b> is correct.</p>
+        </div>
+        <div data-os="linux" hidden>
+          <ol>
+            <li>Open <span class="kbd">Settings</span> → <span class="kbd">About</span> and read the <span class="kbd">Graphics</span> line.</li>
+            <li>Or run <span class="kbd">lspci | grep -i vga</span>, which lists every adapter and only reads.</li>
+          </ol>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="field" id="f-gpu" hidden>
+    <span class="flabel">Which one?</span>
+    <div class="bar" role="group" aria-label="Graphics card model" id="gpuBar"></div>
+    <details class="help"><summary>How do I tell the exact model?</summary>
+      <div class="helpbody">
+        <div data-os="win">
+          <ol>
+            <li>The full name appears in <span class="kbd">Device Manager</span> → <span class="kbd">Display adapters</span>.</li>
+            <li>To confirm the memory: <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">Esc</span>,
+              click <span class="kbd">More details</span> if needed, then <span class="kbd">Performance</span> → your GPU →
+              <span class="kbd">Dedicated GPU memory</span>.</li>
+          </ol>
+          <p class="tip">Only see "Shared GPU memory"? That's built-in graphics — go back and choose
+          <b>Built-in only</b>. And note a laptop card is not the same as the desktop card of the same
+          name: a laptop RTX 4090 has 16 GB and roughly half the memory speed of the desktop version.</p>
+        </div>
+        <div data-os="linux" hidden>
+          <ol>
+            <li><span class="kbd">lspci | grep -i vga</span> gives the model name.</li>
+            <li><span class="kbd">nvidia-smi</span> reports the memory. Both only read.</li>
+          </ol>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="field">
+    <span class="flabel">Roughly how old is the laptop?</span>
+    <div class="bar" role="group" aria-label="Laptop age">
+      <button type="button" class="opt" data-f="age" data-v="new" aria-pressed="false">2023 or newer</button>
+      <button type="button" class="opt" data-f="age" data-v="mid" aria-pressed="false">2020–2022</button>
+      <button type="button" class="opt" data-f="age" data-v="old" aria-pressed="false">2019 or older</button>
+    </div>
+    <details class="help"><summary>Why does this matter?</summary>
+      <div class="helpbody">
+        <p style="margin:0">It stands in for memory generation. When any part of a model runs on the processor,
+        system memory speed sets the pace, and DDR5 is roughly 60% faster than DDR4. A rough answer is enough.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="step" id="s3" hidden>
+  <div class="step-head"><span class="step-no">03</span><h2>Free space on your drive</h2></div>
+  <p class="step-note">Models are downloaded once and kept on disk.</p>
+  <div class="field">
+    <span class="flabel">Available storage</span>
+    <div class="bar" role="group" aria-label="Free disk space">
+      <!-- Values are the LOWER bound of each band, not the upper one. Using the
+           upper bound meant "Under 10 GB" was evaluated as a full 10 GB free,
+           so a 9.1 GB model passed for someone with 2 GB left. The open-ended
+           bottom band uses 5 GB — its own midpoint — since 0 would flag every
+           model on the list. -->
+      <button type="button" class="opt" data-f="disk" data-v="5" aria-pressed="false">Under 10 GB</button>
+      <button type="button" class="opt" data-f="disk" data-v="10" aria-pressed="false">10–25 GB</button>
+      <button type="button" class="opt" data-f="disk" data-v="25" aria-pressed="false">25–50 GB</button>
+      <button type="button" class="opt" data-f="disk" data-v="50" aria-pressed="false">50–100 GB</button>
+      <button type="button" class="opt" data-f="disk" data-v="100" aria-pressed="false">Over 100 GB</button>
+    </div>
+    <details class="help"><summary>Where do I find this?</summary>
+      <div class="helpbody">
+        <div data-os="win" hidden>
+          <ol>
+            <li>Open <span class="kbd">File Explorer</span> and click <span class="kbd">This PC</span>.</li>
+            <li>Under your C: drive it reads "X GB free of Y GB".</li>
+          </ol>
+        </div>
+        <div data-os="mac" hidden>
+          <ol>
+            <li>Click the <span class="kbd">apple menu</span> → <span class="kbd">System Settings</span>.</li>
+            <li>Go to <span class="kbd">General</span> → <span class="kbd">Storage</span>.</li>
+          </ol>
+        </div>
+        <div data-os="linux" hidden>
+          <ol>
+            <li>Open your file manager and look at the sidebar entry for your drive.</li>
+            <li>Or open <span class="kbd">Disk Usage Analyzer</span> if it's installed.</li>
+          </ol>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="step" id="s4" hidden>
+  <div class="step-head"><span class="step-no">04</span><h2>What will you use it for?</h2></div>
+  <p class="step-note">Both answers change the result. Longer inputs need substantially more memory, which is
+  the part most fit calculators leave out.</p>
+
+  <div class="field">
+    <span class="flabel">Main use</span>
+    <div class="bar" role="group" aria-label="Main use">
+      <button type="button" class="opt" data-f="task" data-v="general" aria-pressed="false">General questions</button>
+      <button type="button" class="opt" data-f="task" data-v="coding" aria-pressed="false">Writing code</button>
+      <button type="button" class="opt" data-f="task" data-v="docs" aria-pressed="false">Summarising documents</button>
+      <button type="button" class="opt" data-f="task" data-v="writing" aria-pressed="false">Drafting and editing</button>
+      <button type="button" class="opt" data-f="task" data-v="agents" aria-pressed="false">Automating steps</button>
+      <button type="button" class="opt" data-f="task" data-v="multi" aria-pressed="false">Non-English work</button>
+      <button type="button" class="opt" data-f="task" data-v="vision" aria-pressed="false">Reading images</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="flabel">How much text at once?</span>
+    <div class="bar" role="group" aria-label="Context length">
+      <button type="button" class="opt" data-f="ctx" data-v="4" aria-pressed="false">Short chat<span class="sub">4k tokens</span></button>
+      <button type="button" class="opt" data-f="ctx" data-v="8" aria-pressed="false">Normal<span class="sub">8k tokens</span></button>
+      <button type="button" class="opt" data-f="ctx" data-v="32" aria-pressed="false">Long documents<span class="sub">32k tokens</span></button>
+      <button type="button" class="opt" data-f="ctx" data-v="128" aria-pressed="false">Whole codebases<span class="sub">128k tokens</span></button>
+    </div>
+    <details class="help"><summary>How do I choose?</summary>
+      <div class="helpbody">
+        <p style="margin:0">Roughly 750 words is 1,000 tokens. Back-and-forth chat rarely passes 4k. Pasting a
+        long report or several source files is 32k territory. The memory a model needs for this grows with the
+        length and can exceed the size of the model itself — which is why a model that "fits" for chat can fail
+        outright on long documents.</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<div class="meter-shell" id="meter" hidden>
+  <div class="meter-top"><span>Answers complete</span><span class="meter-val" id="meterVal">0 of 4</span></div>
+  <div class="meter"><i id="meterFill"></i></div>
+  <button type="button" class="cta" id="go" disabled>Show my models</button>
+</div>
+</form>
+
+<p id="reportStatus" class="sr-only" role="status" aria-live="polite"></p>
+
+<section id="report" hidden>
+  <div class="rpt-head">
+    <p class="eyebrow">Estimate</p>
+    <h2 class="rpt-title">Here's what fits.</h2>
+    <div class="rig" id="rig"></div>
+  </div>
+
+  <div class="budget">
+    <div class="l">Memory available to a model</div>
+    <div class="bsplit" id="bsplit"></div>
+    <p id="budgetP"></p>
+  </div>
+
+  <div class="pick" id="pick">
+    <div class="l">Start here</div>
+    <h3 id="pickName"></h3>
+    <p id="pickWhy"></p>
+  </div>
+
+  <h3 class="sec">Runs comfortably</h3>
+  <p class="sec-note">Fits with headroom, and fast enough to read along with.</p>
+  <div id="listGood"></div>
+
+  <h3 class="sec">Runs, but slowly</h3>
+  <p class="sec-note">Loads and answers. Expect to wait, and to close other applications first.</p>
+  <div id="listTight"></div>
+
+  <h3 class="sec">Won't fit</h3>
+  <p class="sec-note">Needs more memory than this machine has at your chosen context length.</p>
+  <div id="listNo"></div>
+
+  <div class="next">
+    <h4>How to actually run one</h4>
+    <ol>
+      <li>Install <b>LM Studio</b> for a normal app window, or <b>Ollama</b> if you're comfortable in a
+        terminal. Both are free.</li>
+      <li>Search the model name and download the <b>Q4_K_M</b> build — that's what these estimates assume.
+        Below about 4B parameters, prefer <b>Q5_K_M</b> or <b>Q6_K</b>; small models lose noticeably more
+        quality to aggressive quantisation.</li>
+      <li>Set the context length in the app to match what you chose here. Leaving it at the model's maximum
+        will reserve far more memory than you need.</li>
+      <li>If generation is slower than estimated, close your browser first. It's usually the browser.</li>
+    </ol>
+  </div>
+
+  <button type="button" class="restart" id="restart">Start over</button>
+</section>
+
+<!-- ================= METHODOLOGY ================= -->
+<section class="method" id="methodology">
+  <p class="eyebrow">Methodology</p>
+  <h2>How these numbers are produced</h2>
+  <p>This is a planning aid with stated error bars, not a benchmark. Everything below is arithmetic you can
+  check, and where a figure is a judgement call rather than a measurement it is labelled as one.</p>
+  <p><a href="#arithmetic" data-scroll="arithmetic">Skip to the formulas →</a></p>
+
+  <h3 class="plainhead">In plain terms</h3>
+  <p>If none of this is familiar, read this part first. It explains the whole model in ordinary language,
+  and every formula further down is one of these ideas written in symbols.</p>
+
+  <div class="pl">
+    <span class="pl-n">A</span>
+    <h4>Why does a model need so much memory?</h4>
+    <div class="analogy">
+      <p>Picture an enormous reference book. To produce <b>one single word</b>, the model has to consult
+      <b>every page</b> of it — not skim, not look things up in an index, but read the whole thing start to
+      finish. Then to produce the next word, it reads the whole book again.</p>
+      <p>Memory is the desk that book has to lie open on. If the book doesn't fit on the desk, you can't
+      work at all.</p>
+    </div>
+    <p class="conseq">That's why fit is a hard yes or no rather than a gradual slowdown, and why a model's
+    file size is the number that matters most. The "book" is the model's weights — the billions of numbers
+    it learned during training.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">B</span>
+    <h4>What's actually taking up the space?</h4>
+    <div class="analogy">
+      <p>Three things share the desk:</p>
+      <p><b>The book</b> — the model's weights. Fixed size. This is what you download.</p>
+      <p><b>The notepad</b> — as the conversation goes on, the model keeps notes on everything said so far so
+      it doesn't have to re-derive it every time. The notepad grows as the conversation grows.</p>
+      <p><b>Elbow room</b> — space to actually work in. Small and roughly fixed.</p>
+    </div>
+    <p class="conseq">The notepad is the part most fit calculators ignore, and it's why this page asks how
+    much text you'll use at once. Paste in a whole codebase and the notepad can end up needing more space
+    than the book. A model that fits comfortably for short chat can fail outright on long documents — same
+    model, same laptop, different job. The notepad is what's called the <b>KV cache</b>.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">C</span>
+    <h4>Why is one model faster than another?</h4>
+    <div class="analogy">
+      <p>Since every word means reading the whole book, speed comes down to <b>how fast you can turn
+      pages</b>. A book twice as thick takes twice as long per word. A reader who turns pages twice as fast
+      finishes in half the time.</p>
+      <p>That's the entire speed calculation: pages divided by page-turning rate.</p>
+    </div>
+    <p class="conseq">The surprising consequence is that a faster processor barely helps. The machine isn't
+    thinking slowly, it's <i>reading</i> slowly — so what matters is how fast your computer can pull data out
+    of memory. That rate is called <b>memory bandwidth</b>, and it's why this page asks about your chip and
+    the age of your laptop. It's also why an old laptop with lots of RAM can hold a big model and still be
+    painful to use: a big desk doesn't make you a faster reader.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">D</span>
+    <h4>What happens when it <i>almost</i> fits?</h4>
+    <div class="analogy">
+      <p>On a Windows or Linux laptop with a graphics card there are two places to put the book: the
+      <b>desk</b> right in front of you, which is the card's own memory, and a <b>shelf across the room</b>,
+      which is ordinary system RAM.</p>
+      <p>Pages on the desk are read almost instantly. Pages on the shelf mean standing up and walking over.
+      When the book doesn't fit on the desk, you don't give up — you keep as much as fits on the desk and
+      leave the rest on the shelf.</p>
+    </div>
+    <p class="conseq">This is the situation most laptops are actually in, and it's why a model can be split
+    across both. But notice the shape of it: leaving even a quarter of the book on the shelf means most of
+    your time goes to walking. A model that's 80% on the graphics card doesn't run at 80% speed — it runs far
+    closer to the slow tier than the fast one. That's why the report shows the split as two coloured segments
+    rather than a single "it fits" tick.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">E</span>
+    <h4>Why do some very large models run quickly?</h4>
+    <div class="analogy">
+      <p>Some newer models aren't one enormous book but a set of specialist volumes — an encyclopedia. For
+      each word, a router decides which two or three volumes are relevant and reads only those.</p>
+      <p>You still need shelf space for the entire encyclopedia. But you only read a small part of it per
+      word.</p>
+    </div>
+    <p class="conseq">So these models need memory like a huge model and generate at the speed of a small one.
+    Qwen3 30B-A3B in the list is one: 30 billion parameters of storage, about 3 billion read per word. Any
+    calculator that treats it as an ordinary model gets it wrong twice over — too pessimistic on speed, and
+    misleading on memory if it reasons backwards from speed. These are called
+    <b>mixture-of-experts</b> models.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">F</span>
+    <h4>Why a range instead of one number?</h4>
+    <div class="analogy">
+      <p>You can work out a drive by dividing distance by the speed limit. The answer is real and useful, and
+      it will still be wrong, because of traffic, lights, weather and how heavy your foot is.</p>
+    </div>
+    <p class="conseq">Same here. The arithmetic gives a defensible central figure; the actual result moves
+    with which program you run it in, how hot your laptop is, and what else is open. A range is the honest
+    form of the answer. Treat the midpoint as the least interesting part of it.</p>
+  </div>
+
+  <div class="pl">
+    <span class="pl-n">G</span>
+    <h4>Why is there a pause before it starts answering?</h4>
+    <div class="analogy">
+      <p>Two different jobs happen. First the model reads <i>your</i> question — and it can take that in
+      many pages at once, all in parallel. Then it writes its answer, strictly one word at a time, reading
+      the whole book for each one.</p>
+    </div>
+    <p class="conseq">Reading is limited by raw calculating power; writing is limited by page-turning speed.
+    They're different bottlenecks with different fixes. <b>The estimates on this page only cover the
+    writing.</b> If you paste in a long document, the pause before the first word can be the largest part of
+    the wait, and nothing here predicts it.</p>
+  </div>
+
+  <h3 class="plainhead" id="arithmetic">The same thing, in symbols</h3>
+
+  <h4>Memory available</h4>
+  <p class="fmap">↑ the desk, from section A</p>
+  <p>Apple Silicon shares one memory pool between processor and graphics, so the budget is a fraction of total
+  RAM. Windows and Linux machines get two separate budgets — graphics memory and system memory — because a
+  model can be split across both.</p>
+  <div class="formula">Apple Silicon   budget = RAM × 0.70
+Intel Mac       budget = RAM − max(3.5, RAM × 0.18)
+Windows/Linux   VRAM budget = VRAM − 0.8      (display and compositor)
+                RAM  budget = RAM − max(3.5, RAM × 0.18)</div>
+
+  <h4>What a model actually needs</h4>
+  <p class="fmap">↑ book + notepad + elbow room, from section B</p>
+  <p>Weights are the file on disk. The KV cache holds the attention state for everything in the context window
+  and grows linearly with it — at long contexts it can exceed the weights. Runtime overhead covers the
+  compute buffers and the process itself.</p>
+  <div class="formula">need = weights + (kv_per_1k × context_k) + overhead</div>
+
+  <h4>Speed, and why a model can be split</h4>
+  <p class="fmap">↑ page-turning rate and the shelf across the room, from sections C, D and E</p>
+  <p>Generating one token requires reading every active parameter from memory once, so single-stream decoding
+  is bound by memory bandwidth rather than compute. llama.cpp offloads whole layers to the GPU and runs the
+  rest on the CPU, which makes the transition between the two continuous rather than a cliff — the common case
+  on a laptop with 8&nbsp;GB of VRAM is that most of a mid-sized model sits on the GPU and the remainder does
+  not.</p>
+  <div class="formula">f = fraction of weights resident in VRAM
+W = bandwidth-relevant weight bytes (active params for MoE)
+
+sec/token = (f × W) / (BW_gpu × E_gpu × M_gpu)  +  ((1 − f) × W) / (BW_cpu × 0.55 × M_cpu)
+
+E_gpu = 0.80  discrete NVIDIA / AMD      E_gpu = 0.68  Apple unified memory
+M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
+  <p>These constants are the fraction of theoretical peak bandwidth an inference runtime actually reaches.
+  They are not guesses: each was derived from a measured throughput figure and cross-checked against others.
+  Apple unified memory lands lower than a discrete card, and CPU lower still, because CPU inference is partly
+  compute-bound and rarely saturates the bus.</p>
+  <p>Mixture-of-experts models need a separate constant on <i>each side</i> of the split, and the two point in
+  opposite directions. Resident on a GPU they run well <b>below</b> the bandwidth ceiling: only a few billion
+  parameters are read per token, which is too little work to saturate the bus, so scattered expert gathers and
+  per-layer launch overhead dominate instead — a 3B-active model on an M4 Max generates around 70 tokens per
+  second where raw bandwidth would allow roughly 300. Offloaded to the CPU they run <b>above</b> what a uniform
+  split predicts, because llama.cpp moves expert layers specifically and keeps attention on the card. Using one
+  number for both was the largest error in earlier versions of this page: 1.10 was fitted on two partial-offload
+  measurements in which the GPU term contributes about 5% of total time, left the resident path effectively
+  unconstrained, and overstated fully-resident MoE throughput by roughly three times.</p>
+  <p>The reported range is ±30% around the central figure — roughly the spread introduced by runtime version,
+  quantisation variant, thermal state and background load. Prefer the range to the midpoint.</p>
+  <p>MoE models are handled separately in both directions: memory follows the <i>total</i> parameter count,
+  speed follows the <i>active</i> count. Treating them as dense produces answers that are wrong twice.</p>
+  <p>One consequence worth stating plainly: the 10–16 GB size band is thin in the current generation,
+  because the major families have polarised toward small models and mid-size ones around 17 GB. If nothing
+  in that range suits you, a mixture-of-experts model split across your card and system memory is usually
+  the better answer than a smaller dense one — only a few billion parameters are read per token, so the
+  slow half of the split costs far less than it would for a dense model of the same size.</p>
+  <p>These constants were chosen by fitting against a handful of commonly reported figures — an 8B at Q4 on a
+  laptop GPU, a 32B on Apple Silicon, an 8B on DDR5 with no GPU. That is calibration against anecdote, not
+  measurement, which is exactly why the validation section below matters.</p>
+
+  <h4>Where each figure comes from</h4>
+  <table class="srctable">
+    <thead><tr><th>Figure</th><th>Provenance</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Memory bandwidth</td><td>Manufacturer specification per chip or card</td><td><span class="badge b-meas">published</span></td></tr>
+      <tr><td>Model file size</td><td>Q4_K_M file listing on the model's Hugging Face repository</td><td><span class="badge b-meas">published</span></td></tr>
+      <tr><td>KV cache per 1k tokens</td><td>Derived from layer count, KV heads and head dimension in <code>config.json</code></td><td><span class="badge b-calc">calculated</span></td></tr>
+      <tr><td>Memory budgets</td><td>Heuristic, tuned to leave a usable system</td><td><span class="badge b-calc">calculated</span></td></tr>
+      <tr><td>Efficiency constant</td><td>Heuristic, from typical observed vs theoretical throughput</td><td><span class="badge b-calc">calculated</span></td></tr>
+      <tr><td>Task suitability scores</td><td>Author's judgement, informed by public benchmarks</td><td><span class="badge b-ed">editorial</span></td></tr>
+      <tr><td>Model descriptions</td><td>Author's judgement</td><td><span class="badge b-ed">editorial</span></td></tr>
+    </tbody>
+  </table>
+
+  <h4>What this does not model</h4>
+  <ul class="limits">
+    <li><b>Prompt processing</b>
+      Estimates cover generation only. Reading your prompt in is compute-bound, not bandwidth-bound, and
+      follows completely different rules. For long documents and retrieval workloads it often dominates total
+      time — a machine that generates at a comfortable rate can still take a long pause before the first word.</li>
+    <li><b>Thermal throttling</b>
+      These are burst figures. Sustained generation on a thin or fanless laptop settles meaningfully lower
+      once the chassis warms up.</li>
+    <li><b>Quantisation quality</b>
+      Q4_K_M is a quality tradeoff, not only a size one, and it costs small models disproportionately more
+      than large ones. A 3B model at Q4 is degraded in ways a 32B at Q4 is not.</li>
+    <li><b>Layer granularity</b>
+      Offload is modelled as a continuous fraction. Real runtimes move whole layers, so actual splits land on
+      discrete steps near the estimate.</li>
+    <li><b>Inference only</b>
+      Fine-tuning or training needs several times this much memory. Nothing here applies to it.</li>
+    <li><b>Speculative decoding, batching and multi-GPU</b>
+      All unmodelled. Each can move throughput substantially away from these figures.</li>
+  </ul>
+
+  <h4>Validation</h4>
+  <p>The efficiency constants are anchored to measured throughput rather than fitted by eye. The last column
+  is what this page now predicts for the same machine, so the residuals are visible rather than asserted:</p>
+  <table class="srctable">
+    <thead><tr><th>Machine</th><th>Model</th><th>Measured</th><th>This page predicts</th></tr></thead>
+    <tbody>
+      <tr><td>M4 Max, <b>32-core</b> (410 GB/s)</td><td>Qwen3.6-27B Q4_K_M (16.8 GB)</td><td>16.6 tok/s</td><td>16.6</td></tr>
+      <tr><td>M2 Max (400 GB/s)</td><td>32B dense Q4 (19.9 GB)</td><td>~14 tok/s</td><td>13.7</td></tr>
+      <tr><td>M1 (68 GB/s)</td><td>8B dense Q4 (4.9 GB)</td><td>~10.5 tok/s</td><td>9.4</td></tr>
+      <tr><td>Laptop GPU, 272 GB/s</td><td>8B dense Q4 (4.9 GB)</td><td>~45 tok/s</td><td>44.4</td></tr>
+      <tr><td>DDR5, no GPU (80 GB/s)</td><td>8B dense Q4 (4.9 GB)</td><td>~9.5 tok/s</td><td>9.0</td></tr>
+      <tr><td>M4 Max, 40-core, <i>fully resident</i></td><td>Qwen3.6-35B-A3B Q4 (21 GB, MoE)</td><td>~70 tok/s <i>(reported)</i></td><td>72</td></tr>
+      <tr><td>RTX 3090, <i>partial offload</i></td><td>Qwen3.6-35B-A3B Q5 (26.6 GB, MoE)</td><td>~75 tok/s</td><td>59 &nbsp;<i>(−22%)</i></td></tr>
+      <tr><td>6 GB VRAM, <i>heavy offload</i></td><td>Qwen3.6-35B-A3B Q4 (21 GB, MoE)</td><td>~30 tok/s</td><td>29.2</td></tr>
+    </tbody>
+  </table>
+  <p><b>Which anchor sets which constant matters.</b> The first row pins the Apple unified-memory constant, and
+  it only implies 0.68 on the <b>32-core</b> M4 Max at 410 GB/s — on the 40-core part at 546 GB/s the same
+  measurement would imply 0.51. Since this page splits Max chips into two bindings precisely because the gap
+  is that large, the binding is now stated rather than left to the reader.</p>
+  <p><b>The MoE rows no longer agree with each other, and that is the honest result.</b> An earlier version
+  used a single constant of 1.10 for mixture-of-experts models, derived from the two offload rows, and reported
+  them as agreeing on 1.12. They do agree — but only because the GPU term contributes roughly 5% of total time
+  in both, which leaves the resident path essentially unmeasured. Carried over to a model sitting entirely in
+  fast memory, that constant predicted a 3B-active MoE on an M4 Max at over 200 tokens per second against a
+  reported 70.</p>
+  <p>Splitting it in two fixes the resident case (row 6, within 3%) and keeps the heavy-offload case (row 8,
+  within 3%), at the cost of under-predicting the 3090 by 22%. That residual is real and worth naming: at 78%
+  resident, llama.cpp's expert-specific offload is furthest ahead of the uniform split this page assumes, and
+  no single pair of constants captures both ends. It sits inside the stated ±30% band, and errs slow.</p>
+  <p>Eight anchors now cover both memory architectures, dense and MoE, and full, partial and heavy offload.
+  Still missing: anything on AMD, anything at long context where the cache dominates, any sustained rather than
+  burst measurement, and a controlled measurement for the fully-resident MoE row, which is currently a reported
+  figure rather than a first-hand one. Results — with machine specification, runtime version, model build and
+  context length — are welcome as issues on the repository.</p>
+</section>
+
+<footer>
+  <p class="stamp">Model data current as of <b id="stampDate2">—</b> · Estimator version <b id="stampVer">—</b></p>
+  <p>This page runs entirely in your browser. Your answers are not transmitted, stored or logged anywhere —
+  there is no server to receive them. The full source, including the model data file, is open, so both the
+  claim and the arithmetic can be checked.</p>
+  <p>New models are released continually. If the date above is more than a few months old, the list is stale.</p>
+</footer>
+
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   DATA
+   To externalise: move this object to models.json and replace
+   the assignment with a fetch(). Keep one copy — do not maintain
+   an inline duplicate alongside a file, they will drift.
+   Every numeric value here is UNVERIFIED. See the pre-publish
+   checklist at the top of this file.
+   ============================================================ */
+const DATA = {
+  version: "0.6.0",
+  updated: "2026-07-25",
+
+  /* GB/s. VERIFIED against Apple tech specs / newsroom, July 2026.
+     Max chips ship in two bindings with materially different bandwidth —
+     both are listed separately because the gap is up to 33%.
+     Sources: support.apple.com tech specs 111901, 111340, 117736, 121553, 126319;
+     apple.com/newsroom M1 Pro/Max, M2 Pro/Max, M4 Pro/Max, M5 Pro/Max. */
+  chips: {
+    intelnew:{bw:45, label:"Intel Mac (2018+)", unified:false},
+    intelold:{bw:28, label:"Intel Mac (2017 or older)", unified:false},
+    m1:     {bw:68,  label:"M1"},
+    m1pro:  {bw:200, label:"M1 Pro"},
+    m1max:  {bw:400, label:"M1 Max"},
+    m2:     {bw:100, label:"M2"},
+    m2pro:  {bw:200, label:"M2 Pro"},
+    m2max:  {bw:400, label:"M2 Max"},
+    m3:     {bw:100, label:"M3"},
+    m3pro:  {bw:150, label:"M3 Pro"},
+    m3max30:{bw:300, label:"M3 Max (30-core GPU)"},
+    m3max40:{bw:400, label:"M3 Max (40-core GPU)"},
+    m4:     {bw:120, label:"M4"},
+    m4pro:  {bw:273, label:"M4 Pro"},
+    m4max32:{bw:410, label:"M4 Max (32-core GPU)"},
+    m4max40:{bw:546, label:"M4 Max (40-core GPU)"},
+    m5:     {bw:153, label:"M5"},
+    m5pro:  {bw:307, label:"M5 Pro"},
+    m5max32:{bw:460, label:"M5 Max (32-core GPU)"},
+    m5max40:{bw:614, label:"M5 Max (40-core GPU)"}
+  },
+  /* Real per-model bandwidth, replacing the old VRAM-capacity proxy which was
+     wrong by up to 85% on RTX 50-series parts. Laptop and desktop parts differ
+     sharply at the same model name — a laptop 4090 is 16 GB / 576 GB/s while a
+     desktop 4090 is 24 GB / 1008 GB/s. VERIFIED against NVIDIA laptop specs. */
+  gpus: {
+    /* NVIDIA laptop, RTX 50 */
+    l5060:{label:"RTX 5060 / 5070 laptop", vram:8,  bw:384, series:"n50"},
+    l5070ti:{label:"RTX 5070 Ti laptop",   vram:12, bw:672, series:"n50"},
+    l5080:{label:"RTX 5080 laptop",        vram:16, bw:896, series:"n50"},
+    l5090:{label:"RTX 5090 laptop",        vram:24, bw:896, series:"n50"},
+    /* NVIDIA laptop, RTX 40 */
+    l4050:{label:"RTX 4050 laptop",        vram:6,  bw:192, series:"n40"},
+    l4060:{label:"RTX 4060 / 4070 laptop", vram:8,  bw:256, series:"n40"},
+    l4080:{label:"RTX 4080 laptop",        vram:12, bw:432, series:"n40"},
+    l4090:{label:"RTX 4090 laptop",        vram:16, bw:576, series:"n40"},
+    /* NVIDIA laptop, RTX 30 */
+    l3050:{label:"RTX 3050 laptop",        vram:4,  bw:192, series:"n30"},
+    l3060:{label:"RTX 3060 laptop",        vram:6,  bw:336, series:"n30"},
+    l3070:{label:"RTX 3070 / 3080 laptop", vram:8,  bw:448, series:"n30"},
+    /* Desktop cards, for anyone running this on a tower */
+    d3090:{label:"RTX 3090 desktop",       vram:24, bw:936,  series:"desk"},
+    d4070:{label:"RTX 4070 desktop",       vram:12, bw:504,  series:"desk"},
+    d4090:{label:"RTX 4090 desktop",       vram:24, bw:1008, series:"desk"},
+    d5080:{label:"RTX 5080 desktop",       vram:16, bw:960,  series:"desk"},
+    d5090:{label:"RTX 5090 desktop",       vram:32, bw:1792, series:"desk"},
+    /* AMD — coarser, fewer parts in laptops */
+    amd8:{label:"Radeon RX, 8 GB",         vram:8,  bw:256, series:"amd"},
+    amd12:{label:"Radeon RX, 12 GB",       vram:12, bw:432, series:"amd"},
+    amd16:{label:"Radeon RX, 16 GB",       vram:16, bw:576, series:"amd"},
+    /* Conservative fallback when the card is unknown */
+    other8:{label:"Not listed — 8 GB",     vram:8,  bw:256, series:"other"},
+    other12:{label:"Not listed — 12 GB",   vram:12, bw:360, series:"other"},
+    other16:{label:"Not listed — 16 GB",   vram:16, bw:480, series:"other"}
+  },
+  /* System memory bandwidth by rough generation. */
+  ageBw: {new:80, mid:50, old:28},
+
+  /* size  = Q4_K_M weights on disk, GB      kv1k = KV cache GB per 1k tokens
+     oh    = fixed runtime overhead, GB      act  = active/total for MoE (omit if dense)
+     Rebuilt 25 Jul 2026. Sizes marked [v] verified against a Hugging Face file
+     listing; others derived from published memory requirements and flagged below. */
+  models: [
+    {id:"gemma4-e2b", name:"Gemma 4 E2B", params:"2.3B effective", size:1.5, kv1k:0.02, oh:0.4,
+     hf:"unsloth/gemma-4-E2B-it-GGUF", ollama:"gemma4:e2b",
+     blurb:"Built for phones and thin laptops. Takes text, images and audio, which is remarkable at this size.",
+     tags:["tiny","vision","audio"], s:{general:2,coding:1,docs:2,writing:2,agents:2,multi:3,vision:3}},
+
+    {id:"qwen3-1.7b", name:"Qwen3 1.7B", params:"1.7B", size:1.3, kv1k:0.03, oh:0.4,
+     hf:"ggml-org/Qwen3-1.7B-GGUF", ollama:"qwen3:1.7b",
+     blurb:"Small, quick and multilingual. Good for classification, tagging and short rewrites.",
+     tags:["tiny"], s:{general:2,coding:2,docs:2,writing:2,agents:2,multi:3,vision:0}},
+
+    {id:"llama3.2-3b", name:"Llama 3.2 3B", params:"3B", size:2.0, kv1k:0.05, oh:0.6,
+     hf:"bartowski/Llama-3.2-3B-Instruct-GGUF", ollama:"llama3.2:3b",
+     blurb:"An older generation, but still the most widely supported model at this size.",
+     tags:["small","well-supported"], s:{general:3,coding:2,docs:3,writing:3,agents:2,multi:3,vision:0}},
+
+    {id:"gemma4-e4b", name:"Gemma 4 E4B", params:"4.5B effective", size:2.8, kv1k:0.03, oh:0.6,
+     blurb:"The smallest model here that behaves like a real assistant. Reads images and audio.",
+     hf:"unsloth/gemma-4-E4B-it-GGUF", ollama:"gemma4:e4b",
+     tags:["small","vision","audio"], s:{general:3,coding:3,docs:3,writing:3,agents:3,multi:4,vision:4}},
+
+    {id:"gemma4-12b", name:"Gemma 4 12B", params:"12B", size:7.0, kv1k:0.08, oh:1.1,
+     hf:"lmstudio-community/gemma-4-12B-it-GGUF", ollama:"gemma4:12b",
+     blurb:"Feeds images and audio straight into the model with no separate encoder. Designed to be the all-round pick for a 16 GB laptop.",
+     tags:["vision","audio","all-rounder"], s:{general:4,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
+
+    {id:"qwen35-9b", name:"Qwen3.5 9B", params:"9B", size:5.8, kv1k:0.07, oh:1.0,
+     hf:"unsloth/Qwen3.5-9B-GGUF", ollama:"qwen3.5:9b",
+     blurb:"Hybrid attention design that keeps the memory needed for long conversations unusually low. A current-generation option in a size band the big families have mostly skipped.",
+     tags:["long context","efficient"], s:{general:4,coding:4,docs:5,writing:4,agents:4,multi:5,vision:0}},
+
+    {id:"phi4-14b", name:"Phi-4 14B", params:"14B", size:9.1, kv1k:0.21, oh:1.4,
+     hf:"microsoft/phi-4-gguf", ollama:"phi4",
+     blurb:"An older generation, kept because it is the best-supported model in the thin 9–16 GB band. Strong on reasoning and maths for its footprint.",
+     tags:["reasoning"], s:{general:4,coding:4,docs:4,writing:3,agents:4,multi:3,vision:0}},
+
+    {id:"gemma4-26b-a4b", name:"Gemma 4 26B-A4B", params:"26B / 3.8B active", size:16.9, kv1k:0.10, oh:1.8,
+     act:3.8/26, hf:"unsloth/gemma-4-26B-A4B-it-GGUF", ollama:"gemma4:26b",
+     blurb:"Mixture of experts with 128 small experts — needs memory like a 26B but generates near the speed of a 4B. Reads images.",
+     tags:["MoE","vision","fast for size"], s:{general:5,coding:4,docs:5,writing:5,agents:5,multi:5,vision:5}},
+
+    {id:"qwen36-27b", name:"Qwen3.6 27B", params:"27B", size:16.8, kv1k:0.14, oh:1.9,
+     hf:"unsloth/Qwen3.6-27B-GGUF", ollama:"qwen3.6:27b",
+     blurb:"The current default for local coding and agent work — it beats the previous generation's 397B flagship on coding benchmarks. Dense, so no routing surprises, and it reads images.",
+     tags:["coding","vision","agents"], s:{general:5,coding:5,docs:5,writing:4,agents:5,multi:5,vision:4}},
+
+    {id:"gemma4-31b", name:"Gemma 4 31B", params:"31B", size:18.0, kv1k:0.12, oh:2.0,
+     hf:"unsloth/gemma-4-31B-it-GGUF", ollama:"gemma4:31b",
+     blurb:"The strongest dense Gemma. Best writing quality that still fits a well-specified laptop.",
+     tags:["writing","vision"], s:{general:5,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
+
+    {id:"qwen36-35b-a3b", name:"Qwen3.6 35B-A3B", params:"35B / 3B active", size:21.0, kv1k:0.10, oh:2.1,
+     act:3/35, hf:"unsloth/Qwen3.6-35B-A3B-GGUF", ollama:"qwen3.6:35b-a3b",
+     blurb:"Mixture of experts with only 3B active per token. Pick this over the 27B when you want speed and have several applications open; pick the 27B when coding quality matters most.",
+     tags:["MoE","vision","fast for size"], s:{general:5,coding:4,docs:5,writing:4,agents:5,multi:5,vision:4}},
+
+    {id:"llama33-70b", name:"Llama 3.3 70B", params:"70B", size:42.5, kv1k:0.33, oh:3.0,
+     hf:"bartowski/Llama-3.3-70B-Instruct-GGUF", ollama:"llama3.3:70b",
+     blurb:"Still strong on general knowledge and instruction following, but a 27B from 2026 now matches it on most tasks at a third of the memory.",
+     tags:["dense","legacy flagship"], s:{general:5,coding:4,docs:5,writing:5,agents:4,multi:4,vision:0}},
+
+    {id:"llama4-scout", name:"Llama 4 Scout", params:"109B / 17B active", size:55.0, kv1k:0.10, oh:4.0,
+     act:17/109, hf:"unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF", ollama:"llama4:scout",
+     blurb:"Sixteen large experts and a very long context window. The memory cost follows the full 109B, which is why it needs a workstation despite activating only 17B per token.",
+     tags:["MoE","very long context","vision"], s:{general:4,coding:3,docs:5,writing:4,agents:4,multi:3,vision:4}}
+  ]
+};
+
+/* Fraction of theoretical peak bandwidth an inference runtime actually achieves.
+   CALIBRATED against measured throughput, not fitted by eye:
+     Apple unified  — Qwen3.6-27B Q4_K_M at 16.56 tok/s on M4 Max implies 0.68;
+                      a 32B on M2 Max and an 8B on M1 imply 0.70 and 0.76.
+     Discrete GPU   — an 8B at Q4 on a 272 GB/s laptop card implies 0.81.
+     CPU            — an 8B at Q4 on DDR5 implies 0.58; kept lower because CPU
+                      inference is partly compute-bound and rarely saturates the bus.
+     MoE            — needs TWO constants, not one, because the resident and the
+                      offloaded halves fail in opposite directions.
+                      · resident (0.35): a 3B-active MoE fully on an M4 Max
+                        generates ~70 tok/s, not the ~300 that pure bandwidth
+                        would give. Decode reads too few bytes per token to
+                        saturate the bus, so expert gathers and kernel launches
+                        dominate. This is the physically clean case.
+                      · offloaded (1.12): two partial-offload measurements of
+                        Qwen3.6-35B-A3B (26.6 GB on an RTX 3090 at 75 tok/s, and
+                        21 GB on 6 GB of VRAM at 30 tok/s) both imply 1.12.
+                        It exceeds 1.0 because llama.cpp offloads expert layers
+                        specifically, keeping attention resident — which beats
+                        the uniform-fraction split assumed here.
+                      A single constant cannot span both. An earlier version used
+                      1.10 everywhere, calibrated only on the two offload anchors
+                      above; because the GPU term is ~5% of the total in both, it
+                      was effectively unconstrained on the resident path and
+                      overstated fully-resident MoE by roughly 3x. */
+const EFF_DISCRETE = 0.80;
+const EFF_UNIFIED  = 0.68;
+const EFF_CPU      = 0.55;
+const EFF_MOE_GPU  = 0.35;
+const EFF_MOE_CPU  = 1.12;
+const BAND = 0.30;
+const TASK_LABEL = {general:"general questions",coding:"writing code",docs:"summarising documents",
+  writing:"drafting and editing",agents:"automating steps",multi:"non-English work",vision:"reading images"};
+
+const state = {os:null, chip:null, ram:null, series:null, gpu:null, age:null, disk:null, task:null, ctx:null};
+
+document.getElementById("stampDate").textContent  = DATA.updated;
+document.getElementById("stampDate2").textContent = DATA.updated;
+document.getElementById("stampVer").textContent   = DATA.version;
+
+/* ---------------- interaction ---------------- */
+document.addEventListener("click", e=>{
+  const b = e.target.closest("[data-f]");
+  if(!b) return;
+  const f = b.dataset.f, v = b.dataset.v;
+  state[f] = v;
+  b.closest("[role=group]").querySelectorAll("[data-f='"+f+"']")
+    .forEach(o=>o.setAttribute("aria-pressed", o===b?"true":"false"));
+  if(f==="os") applyOS(v);
+  if(f==="series") buildGpuBar(v);
+  refresh();
+});
+
+/* Fields that describe the machine. Switching OS invalidates these and nothing
+   else — disk, task and context are answered the same way on every platform, so
+   they keep both their state AND their pressed buttons. Clearing the buttons
+   without clearing the state (the earlier behaviour) left the meter counting
+   answers the form no longer appeared to have. */
+const HW_FIELDS = ["chip","ram","series","gpu","age"];
+
+function applyOS(os){
+  HW_FIELDS.forEach(k=>state[k]=null);
+  document.querySelectorAll("[aria-pressed=true]").forEach(x=>{
+    if(HW_FIELDS.includes(x.dataset.f)) x.setAttribute("aria-pressed","false");
+  });
+  document.getElementById("s2-mac").hidden = os!=="mac";
+  document.getElementById("s2-pc").hidden  = os==="mac";
+  document.getElementById("f-gpu").hidden = true;
+  document.getElementById("gpuBar").innerHTML = "";
+  document.getElementById("s3").hidden = false;
+  document.getElementById("s4").hidden = false;
+  document.getElementById("meter").hidden = false;
+  document.querySelectorAll("[data-os]").forEach(el=>{ el.hidden = el.dataset.os!==os; });
+}
+
+function buildGpuBar(series){
+  state.gpu = null;
+  const bar = document.getElementById("gpuBar");
+  const field = document.getElementById("f-gpu");
+  if(series==="none"){ field.hidden = true; bar.innerHTML = ""; refresh(); return; }
+  const entries = Object.entries(DATA.gpus).filter(([,g])=>g.series===series);
+  bar.innerHTML = entries.map(([k,g])=>
+    `<button type="button" class="opt" data-f="gpu" data-v="${k}" aria-pressed="false">${esc(g.label)}<span class="sub">${g.vram} gb · ${g.bw} gb/s</span></button>`
+  ).join("");
+  field.hidden = false;
+  refresh();
+}
+
+function needed(){
+  if(state.os==="mac") return ["chip","ram","disk","task","ctx"];
+  const base = ["ram","series","age","disk","task","ctx"];
+  if(state.series && state.series!=="none") base.push("gpu");
+  return base;
+}
+function refresh(){
+  const req = needed();
+  const done = req.filter(k=>state[k]!==null).length;
+  document.getElementById("meterFill").style.width = Math.round(done/req.length*100)+"%";
+  document.getElementById("meterVal").textContent = done+" of "+req.length;
+  document.getElementById("go").disabled = done<req.length;
+}
+
+/* ---------------- engine ---------------- */
+function headroom(ram){ return Math.max(3.5, ram*0.18); }
+
+function computeRig(){
+  const ram = +state.ram;
+  if(state.os==="mac"){
+    const c = DATA.chips[state.chip];
+    if((state.chip==="intelnew"||state.chip==="intelold")){
+      return {vram:0, sys:Math.max(1, ram-headroom(ram)), bwGpu:0, bwCpu:c.bw,
+        unified:false, chip:c.label,
+        note:"Intel Macs run models on the processor only. Memory bandwidth is the limit, so expect modest speeds and favour smaller models."};
+    }
+    const b = ram*0.70;
+    return {vram:b, sys:0, bwGpu:c.bw, bwCpu:c.bw, unified:true, chip:c.label,
+      note:"Apple Silicon shares one memory pool between processor and graphics, so most of your RAM is available to a model and there is no slow fallback tier — a model either fits or it doesn't."};
+  }
+  const sys = Math.max(1, ram-headroom(ram));
+  if(state.gpu && DATA.gpus[state.gpu]){
+    const g = DATA.gpus[state.gpu];
+    return {vram:Math.max(0, g.vram-0.8), sys, bwGpu:g.bw, bwCpu:DATA.ageBw[state.age],
+      unified:false, chip:g.label,
+      note:"A model that fits inside graphics memory runs several times faster. Larger models are split — the layers that fit go on the card, the rest run on the processor, and speed lands between the two."};
+  }
+  return {vram:0, sys, bwGpu:0, bwCpu:DATA.ageBw[state.age], unified:false, chip:"built-in graphics",
+    note:"Without a dedicated graphics card everything runs on the processor, where system memory bandwidth sets the pace. Smaller models are the sweet spot."};
+}
+
+function evaluate(m, rig, ctxK){
+  const kv     = m.kv1k * ctxK;
+  const need   = m.size + kv + m.oh;
+  const total  = rig.vram + rig.sys;
+  const active = m.act ? m.size * m.act : m.size;   /* bandwidth-relevant bytes */
+
+  if(need > total) return {m, need, kv, verdict:"no", f:0, vramUsed:0};
+
+  /* fraction of weights resident in VRAM after KV and overhead take their share */
+  let f = 0;
+  if(rig.vram > 0){
+    const forWeights = Math.max(0, rig.vram - kv - m.oh);
+    f = Math.min(1, forWeights / m.size);
+  }
+  /* MoE gets a different constant on each side of the split — see the comment on
+     EFF_MOE_GPU/EFF_MOE_CPU. Applying one number to both was the largest single
+     error in earlier versions of this page. */
+  const moeGpu = m.act ? EFF_MOE_GPU : 1;
+  const moeCpu = m.act ? EFF_MOE_CPU : 1;
+  const effGpu = (rig.unified ? EFF_UNIFIED : EFF_DISCRETE);
+  const secPerTok = (f*active)/((rig.bwGpu||1e9) * effGpu * moeGpu)
+                  + ((1-f)*active)/(rig.bwCpu * EFF_CPU * moeCpu);
+  const tps = 1 / secPerTok;
+
+  let verdict;
+  if(tps < 3.5) verdict = "tight";
+  else if(need > total*0.90) verdict = "tight";
+  else if(!rig.unified && rig.vram>0 && f<1 && tps<9) verdict = "tight";
+  else verdict = "good";
+
+  if(m.size > +state.disk && verdict!=="no") verdict = "tight";
+
+  /* Bytes actually sitting on the fast tier. The gauge needs this rather than f,
+     which is a fraction of weights only and cannot be mixed with a fraction of
+     total need without the two segments drifting apart. */
+  const vramUsed = rig.vram > 0 ? Math.min(rig.vram, kv + m.oh + f*m.size) : 0;
+  return {m, need, kv, verdict, f, tps, vramUsed};
+}
+
+function build(){
+  const rig  = computeRig();
+  const ctxK = +state.ctx;
+  const task = state.task;
+
+  const rows = DATA.models.map(m=>{
+    const r = evaluate(m, rig, ctxK);
+    r.fit = m.s[task];
+    return r;
+  });
+
+  const rank = (a,b)=> (b.fit-a.fit) || ((b.tps||0)-(a.tps||0));
+  /* fit>0 applies to all three lists. Filtering it out of two but not the third
+     put models unsuited to the chosen task in "won't fit" while hiding equally
+     unsuited ones that happened to fit. */
+  const good  = rows.filter(r=>r.verdict==="good"  && r.fit>0).sort(rank);
+  const tight = rows.filter(r=>r.verdict==="tight" && r.fit>0).sort(rank);
+  const no    = rows.filter(r=>r.verdict==="no"    && r.fit>0).sort((a,b)=>a.need-b.need);
+
+  const chips = [state.os==="mac"?"macOS":state.os==="win"?"Windows":"Linux"];
+  if(state.os==="mac") chips.push(rig.chip);
+  chips.push(state.ram+" GB RAM");
+  if(state.os!=="mac") chips.push(rig.chip);
+  chips.push(ctxK+"k context");
+  chips.push(TASK_LABEL[task]);
+  document.getElementById("rig").innerHTML = chips.map(c=>"<span>"+esc(c)+"</span>").join("");
+
+  const bs = document.getElementById("bsplit");
+  bs.innerHTML = rig.unified
+    ? `<div><div class="n">${rig.vram.toFixed(1)} GB</div><div class="cap">unified memory</div></div>`
+    : (rig.vram>0
+        ? `<div><div class="n">${rig.vram.toFixed(1)} GB</div><div class="cap">graphics — fast</div></div>
+           <div><div class="n">${rig.sys.toFixed(1)} GB</div><div class="cap">system — slower</div></div>`
+        : `<div><div class="n">${rig.sys.toFixed(1)} GB</div><div class="cap">system memory</div></div>`);
+  /* Min and max across every model. Reading the first and last array entries
+     assumed the list was sorted by cache size; it is sorted by size on disk, so
+     the quoted worst case was understating the real one by more than 3x. */
+  const kvAll = DATA.models.map(m=>m.kv1k*ctxK);
+  document.getElementById("budgetP").textContent = rig.note +
+    " At " + ctxK + "k context, attention state alone claims between " +
+    Math.min(...kvAll).toFixed(1) + " and " +
+    Math.max(...kvAll).toFixed(1) + " GB depending on the model.";
+
+  const best = good[0] || tight[0];
+  const pick = document.getElementById("pick");
+  if(best){
+    pick.hidden = false;
+    document.getElementById("pickName").textContent = best.m.name;
+    document.getElementById("pickWhy").textContent =
+      best.m.blurb + " Estimated " + range(best.tps) + " tokens per second here, which is " +
+      speedWord(best.tps) + " for " + TASK_LABEL[task] + ".";
+  } else pick.hidden = true;
+
+  render("listGood", good, rig,
+    "Nothing fits comfortably at " + ctxK + "k context. Try a shorter context length — attention state is often what pushes a model over the line, not the model itself.");
+  render("listTight", tight, rig, "Nothing in this category.");
+  render("listNo", no.slice(0,5), rig, "Everything on the list fits. Nice machine.");
+
+  document.getElementById("form").hidden = true;
+  document.getElementById("report").hidden = false;
+  /* Announce a one-line summary rather than putting aria-live on the whole
+     report, which would queue the entire document for read-out on reveal. */
+  document.getElementById("reportStatus").textContent =
+    "Estimate ready. " + good.length + " model" + (good.length===1?"":"s") +
+    " run comfortably, " + tight.length + " run slowly.";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function range(t){
+  const lo = t*(1-BAND), hi = t*(1+BAND);
+  const r = x => x>=20 ? Math.round(x) : x>=3 ? Math.round(x*10)/10 : Math.round(x*100)/100;
+  return r(lo)+"–"+r(hi);
+}
+function speedWord(t){
+  if(t>=30) return "faster than you can read";
+  if(t>=15) return "comfortable";
+  if(t>=7)  return "readable";
+  if(t>=3)  return "slow but usable";
+  return "very slow";
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function render(elId, rows, rig, emptyMsg){
+  const el = document.getElementById(elId);
+  if(!rows.length){ el.innerHTML = `<p class="empty">${esc(emptyMsg)}</p>`; return; }
+  el.innerHTML = rows.map(r=>{
+    const total = rig.vram + rig.sys;
+    const pct   = Math.min(100, r.need/total*100);
+    let bars, split="";
+    if(r.verdict==="no"){
+      bars = `<i class="seg-over" style="width:100%"></i>`;
+    } else if(rig.vram>0 && !rig.unified && r.f<1){
+      /* Both segments measured in bytes against the same denominator, so they
+         sum to pct exactly. */
+      const g = r.vramUsed/total*100, c = (r.need-r.vramUsed)/total*100;
+      bars = `<i class="seg-gpu" style="width:${g}%"></i><i class="seg-cpu" style="width:${c}%"></i>`;
+      split = `<p class="split-note">split — about ${Math.round(r.f*100)}% on the graphics card, the rest on the processor</p>`;
+    } else {
+      bars = `<i class="seg-gpu" style="width:${pct}%"></i>`;
+    }
+    const vl = r.verdict==="good" ? `<span class="verdict v-good">fits</span>`
+             : r.verdict==="tight"? `<span class="verdict v-tight">tight</span>`
+             : `<span class="verdict v-no">too large</span>`;
+    const spd = r.verdict==="no"
+      ? `needs ${r.need.toFixed(1)} GB`
+      : `~${range(r.tps)} tok/s · ${r.need.toFixed(1)} GB`;
+    const kvNote = r.kv >= r.m.size*0.5
+      ? `<span class="tag">KV cache ${r.kv.toFixed(1)} GB</span>` : "";
+    const smallQ = r.m.size < 2.6 ? `<span class="tag">prefer Q5/Q6</span>` : "";
+
+    /* Recommended build follows the same rule as the report advice: small models
+       lose disproportionately to aggressive quantisation, so lift them above Q4.
+       The command stays the plain tag either way — synthesising a quant suffix
+       produced tags that mostly do not exist (Ollama cases them q4_K_M, and a
+       tag already carrying a variant rarely accepts a second one). The Q5/Q6
+       recommendation is carried by the badge and the tag beside the name. */
+    const quant = r.m.size < 2.6 ? "Q5_K_M" : "Q4_K_M";
+    const hfRepo = "https://huggingface.co/" + r.m.hf;
+    const pull = `ollama pull ${r.m.ollama}`;
+    const links = `<div class="links">
+        <a href="${hfRepo}" target="_blank" rel="noopener noreferrer">Model card</a>
+        <a href="${hfRepo}/tree/main" target="_blank" rel="noopener noreferrer">All quant files</a>
+        <a href="https://ollama.com/search?q=${encodeURIComponent(r.m.name)}" target="_blank" rel="noopener noreferrer">Find on Ollama</a>
+        <span class="rec">recommended build: <b>${quant}</b></span>
+      </div>
+      <div class="cmd"><code>${esc(pull)}</code><button type="button" class="copy" data-copy="${esc(pull)}">Copy</button></div>`;
+
+    return `<div class="row">
+      <div class="row-top">
+        <div class="row-name">${esc(r.m.name)}<span class="q">${esc(r.m.params)} · ${quant}</span></div>
+        <div class="row-speed">${vl} &nbsp; ${spd}</div>
+      </div>
+      <div class="gauge">${bars}</div>
+      <p class="row-desc">${esc(r.m.blurb)}</p>
+      ${split}
+      <div class="tags">
+        ${r.m.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}
+        ${kvNote}${smallQ}
+        <span class="tag ed">suitability: editorial</span>
+      </div>
+      ${links}
+    </div>`;
+  }).join("");
+}
+
+/* In-page navigation. Handled in JS rather than left to the browser so the link
+   also works when the page is served inside a sandboxed iframe, where a bare
+   fragment resolves against the frame URL instead of scrolling. */
+document.addEventListener("click", e=>{
+  const a = e.target.closest("[data-scroll]");
+  if(!a) return;
+  e.preventDefault();
+  const target = document.getElementById(a.dataset.scroll);
+  if(!target) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({behavior: reduce ? "auto" : "smooth", block:"start"});
+  target.setAttribute("tabindex","-1");
+  target.focus({preventScroll:true});
+});
+
+/* Copy the pull command. Uses the async clipboard API where available and falls
+   back to a hidden textarea, since GitHub Pages is HTTPS but local file:// is not. */
+document.addEventListener("click", async e=>{
+  const b = e.target.closest("[data-copy]");
+  if(!b) return;
+  const text = b.dataset.copy;
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); ta.remove();
+    }
+    const was = b.textContent;
+    b.textContent = "Copied";
+    setTimeout(()=>{ b.textContent = was; }, 1400);
+  }catch(err){
+    b.textContent = "Press ⌘/Ctrl+C";
+  }
+});
+
+document.getElementById("go").addEventListener("click", build);
+document.getElementById("restart").addEventListener("click", ()=>location.reload());
+</script>
+</body>
+</html>
