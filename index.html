@@ -630,7 +630,9 @@ footer a{color:var(--signal)}
         terminal. Both are free.</li>
       <li>Search the model name and download the <b>Q4_K_M</b> build — that's what these estimates assume.
         Below about 4B parameters, prefer <b>Q5_K_M</b> or <b>Q6_K</b>; small models lose noticeably more
-        quality to aggressive quantisation.</li>
+        quality to aggressive quantisation. A few models are released pre-quantised by their publisher and
+        have no Q4_K_M build at all — those rows say <i>ships as</i> rather than <i>recommended build</i>,
+        and there is nothing to choose.</li>
       <li>Set the context length in the app to match what you chose here. Leaving it at the model's maximum
         will reserve far more memory than you need.</li>
       <li>If generation is slower than estimated, close your browser first. It's usually the browser.</li>
@@ -773,6 +775,9 @@ Windows/Linux   VRAM budget = VRAM − 0.8      (display and compositor)
 
   <h4>What a model actually needs</h4>
   <p class="fmap">↑ book + notepad + elbow room, from section B</p>
+  <p>Estimates assume the <code>Q4_K_M</code> build unless a model is released pre-quantised by its
+  publisher — GPT-OSS is trained quantisation-aware and shipped in MXFP4, so its figure is the native
+  release rather than a community conversion.</p>
   <p>Weights are the file on disk. The KV cache holds the attention state for everything in the context window
   and grows linearly with it — at long contexts it can exceed the weights. Runtime overhead covers the
   compute buffers and the process itself.</p>
@@ -855,7 +860,7 @@ disk        = p × 2 GB                bf16 weights, for BOTH paths</div>
     <thead><tr><th>Figure</th><th>Provenance</th><th>Status</th></tr></thead>
     <tbody>
       <tr><td>Memory bandwidth</td><td>Manufacturer specification per chip or card</td><td><span class="badge b-meas">published</span></td></tr>
-      <tr><td>Model file size</td><td>Q4_K_M file listing on the model's Hugging Face repository</td><td><span class="badge b-meas">published</span></td></tr>
+      <tr><td>Model file size</td><td>Q4_K_M file listing on the model's Hugging Face repository, or the publisher's own release for models that ship pre-quantised</td><td><span class="badge b-meas">published</span></td></tr>
       <tr><td>KV cache per 1k tokens</td><td>Derived from layer count, KV heads and head dimension in <code>config.json</code></td><td><span class="badge b-calc">calculated</span></td></tr>
       <tr><td>Memory budgets</td><td>Heuristic, tuned to leave a usable system</td><td><span class="badge b-calc">calculated</span></td></tr>
       <tr><td>Efficiency constant</td><td>Heuristic, from typical observed vs theoretical throughput</td><td><span class="badge b-calc">calculated</span></td></tr>
@@ -1055,9 +1060,11 @@ const DATA = {
      blurb:"An older generation, kept because it is the best-supported model in the thin 9–16 GB band. Strong on reasoning and maths for its footprint.",
      tags:["reasoning"], s:{general:4,coding:4,docs:4,writing:3,agents:4,multi:3,vision:0}},
 
-    /* gpt-oss ships natively in MXFP4 rather than being quantised to Q4_K_M
-       afterwards, so 14 GB is its native size, not a community quant. */
-    {id:"gpt-oss-20b", name:"GPT-OSS 20B", params:"21B / 3.6B active", p:21, size:14.0, kv1k:0.05, oh:1.6,
+    /* q: set when a model ships pre-quantised by its publisher rather than being
+       converted to Q4_K_M afterwards. gpt-oss is trained quantisation-aware and
+       released in MXFP4, so there is no Q4_K_M build to recommend and 14 GB is
+       the native size, not a community quant. */
+    {id:"gpt-oss-20b", name:"GPT-OSS 20B", params:"21B / 3.6B active", p:21, size:14.0, kv1k:0.05, oh:1.6, q:"MXFP4",
      act:3.6/21, hf:"openai/gpt-oss-20b", ollama:"gpt-oss:20b",
      blurb:"OpenAI's open-weight model. Reasoning-tuned with an adjustable effort setting, and a mixture of experts, so it generates far faster than 21B suggests.",
      tags:["MoE","reasoning","fast for size"], s:{general:5,coding:4,docs:4,writing:4,agents:5,multi:3,vision:0}},
@@ -1442,6 +1449,12 @@ function trainBlock(m, rig){
   /* Full fine-tuning is "no" for every model on every laptop. Stated as a plain
      sentence with the number rather than a red verdict — the magnitude is the
      informative part, and thirteen red marks would just be noise. */
+  /* A pre-quantised release has no bf16 checkpoint to train against, so the disk
+     figure refers to a conversion rather than to the file you would download to
+     run it — worth saying, since it is the one number that differs. */
+  const nativeNote = m.q ? `<p class="ft-note">${esc(m.name)} ships pre-quantised as ${esc(m.q)}, and
+    training needs weights at bf16. The disk figure above is for that conversion, not for the file you
+    would download to run the model.</p>` : "";
   const full = `<p class="ft-note">Full fine-tuning needs roughly <b>${g(n.full)} GB</b> — weights,
     gradients and optimiser state together run to about 16 bytes per parameter. That is beyond any
     laptop, for every model on this list.</p>`;
@@ -1450,7 +1463,7 @@ function trainBlock(m, rig){
 
   if(t.blocked){
     return `<div class="ft"><div class="ft-l">Fine-tuning on this machine</div>
-      <p class="ft-blocked">${esc(t.blocked)}</p>${full}
+      <p class="ft-blocked">${esc(t.blocked)}</p>${nativeNote}${full}
       <p class="ft-cloud">Elsewhere: 4-bit LoRA on this model needs about ${g(n.qlora)} GB of GPU
       memory and ${g(n.disk)} GB of disk — ${esc(cloudTier(n.qlora))}.</p>
       ${prov("no local path")}</div>`;
@@ -1471,9 +1484,9 @@ function trainBlock(m, rig){
     <div class="ft-l">Fine-tuning on this machine</div>
     <div class="ft-grid">${opt("LoRA", t.lora, n.lora)}${opt(t.q4label, t.qlora, n.qlora)}</div>
     <p class="ft-req">${t.appleSilicon?"unified memory":"GPU memory"} you have <b>${g(t.budget)} GB</b>
-      · disk needed <b>${g(n.disk)} GB</b> (bf16 weights, not the Q4 file)
+      · disk needed <b>${g(n.disk)} GB</b> (bf16 weights, not the ${esc(m.q || "Q4")} file)
       · system RAM <b>${g(n.ram)} GB</b>${warn.length?` · <span class="ft-warn">${esc(warn.join("; "))}</span>`:""}</p>
-    ${full}${cloud}
+    ${nativeNote}${full}${cloud}
     ${prov(t.stack)}
   </div>`;
 }
@@ -1504,7 +1517,10 @@ function render(elId, rows, rig, emptyMsg){
       : `~${range(r.tps)} tok/s · ${r.need.toFixed(1)} GB`;
     const kvNote = r.kv >= r.m.size*0.5
       ? `<span class="tag">KV cache ${r.kv.toFixed(1)} GB</span>` : "";
-    const smallQ = r.m.size < 2.6 ? `<span class="tag">prefer Q5/Q6</span>` : "";
+    /* A model that ships pre-quantised has no build to choose, so the
+       small-model Q5/Q6 advice does not apply to it. */
+    const native = !!r.m.q;
+    const smallQ = (!native && r.m.size < 2.6) ? `<span class="tag">prefer Q5/Q6</span>` : "";
 
     /* Recommended build follows the same rule as the report advice: small models
        lose disproportionately to aggressive quantisation, so lift them above Q4.
@@ -1512,14 +1528,14 @@ function render(elId, rows, rig, emptyMsg){
        produced tags that mostly do not exist (Ollama cases them q4_K_M, and a
        tag already carrying a variant rarely accepts a second one). The Q5/Q6
        recommendation is carried by the badge and the tag beside the name. */
-    const quant = r.m.size < 2.6 ? "Q5_K_M" : "Q4_K_M";
+    const quant = r.m.q || (r.m.size < 2.6 ? "Q5_K_M" : "Q4_K_M");
     const hfRepo = "https://huggingface.co/" + r.m.hf;
     const pull = `ollama pull ${r.m.ollama}`;
     const links = `<div class="links">
         <a href="${hfRepo}" target="_blank" rel="noopener noreferrer">Model card</a>
-        <a href="${hfRepo}/tree/main" target="_blank" rel="noopener noreferrer">All quant files</a>
+        <a href="${hfRepo}/tree/main" target="_blank" rel="noopener noreferrer">${native ? "Repository files" : "All quant files"}</a>
         <a href="https://ollama.com/search?q=${encodeURIComponent(r.m.name)}" target="_blank" rel="noopener noreferrer">Find on Ollama</a>
-        <span class="rec">recommended build: <b>${quant}</b></span>
+        <span class="rec">${native ? "ships as" : "recommended build:"} <b>${quant}</b></span>
       </div>
       <div class="cmd"><code>${esc(pull)}</code><button type="button" class="copy" data-copy="${esc(pull)}">Copy</button></div>`;
 
