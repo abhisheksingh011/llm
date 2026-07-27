@@ -809,11 +809,13 @@ M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
   quantisation variant, thermal state and background load. Prefer the range to the midpoint.</p>
   <p>MoE models are handled separately in both directions: memory follows the <i>total</i> parameter count,
   speed follows the <i>active</i> count. Treating them as dense produces answers that are wrong twice.</p>
-  <p>One consequence worth stating plainly: the 10–16 GB size band is thin in the current generation,
-  because the major families have polarised toward small models and mid-size ones around 17 GB. If nothing
-  in that range suits you, a mixture-of-experts model split across your card and system memory is usually
-  the better answer than a smaller dense one — only a few billion parameters are read per token, so the
-  slow half of the split costs far less than it would for a dense model of the same size.</p>
+  <p>One consequence worth stating plainly. The 10–16 GB band used to be thin, because the major families
+  had polarised toward small models and mid-size ones around 17 GB — an earlier version of this page said
+  so. That is no longer true: GPT-OSS 20B and Mistral Small 24B both land at 14 GB and are the natural
+  answer for a 16 GB card. Where the band still leaves you short, a mixture-of-experts model split across
+  your card and system memory usually beats a smaller dense one — only a few billion parameters are read
+  per token, so the slow half of the split costs far less than it would for a dense model of the same
+  size.</p>
   <p>These constants were chosen by fitting against a handful of commonly reported figures — an 8B at Q4 on a
   laptop GPU, a 32B on Apple Silicon, an 8B on DDR5 with no GPU. That is calibration against anecdote, not
   measurement, which is exactly why the validation section below matters.</p>
@@ -946,8 +948,8 @@ disk        = p × 2 GB                bf16 weights, for BOTH paths</div>
    checklist at the top of this file.
    ============================================================ */
 const DATA = {
-  version: "0.7.0",
-  updated: "2026-07-25",
+  version: "0.8.0",
+  updated: "2026-07-26",
 
   /* GB/s. VERIFIED against Apple tech specs / newsroom, July 2026.
      Max chips ship in two bindings with materially different bandwidth —
@@ -1038,7 +1040,7 @@ const DATA = {
      hf:"unsloth/gemma-4-E4B-it-GGUF", ollama:"gemma4:e4b",
      tags:["small","vision","audio"], s:{general:3,coding:3,docs:3,writing:3,agents:3,multi:4,vision:4}},
 
-    {id:"gemma4-12b", name:"Gemma 4 12B", params:"12B", p:12, size:7.0, kv1k:0.08, oh:1.1,
+    {id:"gemma4-12b", name:"Gemma 4 12B", params:"12B", p:12, size:7.6, kv1k:0.08, oh:1.1,
      hf:"lmstudio-community/gemma-4-12B-it-GGUF", ollama:"gemma4:12b",
      blurb:"Feeds images and audio straight into the model with no separate encoder. Designed to be the all-round pick for a 16 GB laptop.",
      tags:["vision","audio","all-rounder"], s:{general:4,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
@@ -1052,6 +1054,18 @@ const DATA = {
      hf:"microsoft/phi-4-gguf", ollama:"phi4",
      blurb:"An older generation, kept because it is the best-supported model in the thin 9–16 GB band. Strong on reasoning and maths for its footprint.",
      tags:["reasoning"], s:{general:4,coding:4,docs:4,writing:3,agents:4,multi:3,vision:0}},
+
+    /* gpt-oss ships natively in MXFP4 rather than being quantised to Q4_K_M
+       afterwards, so 14 GB is its native size, not a community quant. */
+    {id:"gpt-oss-20b", name:"GPT-OSS 20B", params:"21B / 3.6B active", p:21, size:14.0, kv1k:0.05, oh:1.6,
+     act:3.6/21, hf:"openai/gpt-oss-20b", ollama:"gpt-oss:20b",
+     blurb:"OpenAI's open-weight model. Reasoning-tuned with an adjustable effort setting, and a mixture of experts, so it generates far faster than 21B suggests.",
+     tags:["MoE","reasoning","fast for size"], s:{general:5,coding:4,docs:4,writing:4,agents:5,multi:3,vision:0}},
+
+    {id:"mistral-small-24b", name:"Mistral Small 24B", params:"24B", p:24, size:14.0, kv1k:0.16, oh:1.7,
+     hf:"mistralai/Mistral-Small-3.2-24B-Instruct-2506", ollama:"mistral-small:24b",
+     blurb:"Native function calling and dependable JSON output, which is why it keeps turning up in agent stacks. Also one of the few current models that actually lands in the thin 10–16 GB band.",
+     tags:["agents","function calling","vision"], s:{general:4,coding:4,docs:4,writing:4,agents:5,multi:4,vision:3}},
 
     {id:"gemma4-26b-a4b", name:"Gemma 4 26B-A4B", params:"26B / 3.8B active", p:26, size:16.9, kv1k:0.10, oh:1.8,
      act:3.8/26, hf:"unsloth/gemma-4-26B-A4B-it-GGUF", ollama:"gemma4:26b",
@@ -1067,6 +1081,11 @@ const DATA = {
      hf:"unsloth/gemma-4-31B-it-GGUF", ollama:"gemma4:31b",
      blurb:"The strongest dense Gemma. Best writing quality that still fits a well-specified laptop.",
      tags:["writing","vision"], s:{general:5,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
+
+    {id:"qwen3-coder-30b", name:"Qwen3 Coder 30B-A3B", params:"30B / 3B active", p:30, size:19.0, kv1k:0.10, oh:2.0,
+     act:3/30, hf:"Qwen/Qwen3-Coder-30B-A3B-Instruct", ollama:"qwen3-coder:30b",
+     blurb:"Built specifically for agentic coding — repository-scale edits and long tool-calling loops rather than single-file completions. Mixture of experts, so it stays quick while holding 30B of knowledge.",
+     tags:["MoE","coding","agents"], s:{general:4,coding:5,docs:4,writing:3,agents:5,multi:3,vision:0}},
 
     {id:"qwen36-35b-a3b", name:"Qwen3.6 35B-A3B", params:"35B / 3B active", p:35, size:21.0, kv1k:0.10, oh:2.1,
      act:3/35, hf:"unsloth/Qwen3.6-35B-A3B-GGUF", ollama:"qwen3.6:35b-a3b",
