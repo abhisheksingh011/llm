@@ -189,6 +189,27 @@ h3.sec{font-family:var(--font-display);font-size:15px;letter-spacing:.02em;
 .copy:hover{background:var(--signal)}
 .copy:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
 
+/* Fine-tuning block. Deliberately a quieter visual register than the inference
+   numbers above it — dashed rule, no solid fills — because these figures are
+   calculated and not backed by measurement the way the speed estimates are. */
+.ft{margin:13px 0 0;border:1px dashed var(--rule);border-radius:3px;padding:13px 15px}
+.ft-l{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-soft);margin-bottom:9px}
+.ft-grid{display:flex;flex-wrap:wrap;gap:7px 20px;margin-bottom:9px}
+.ft-opt{font-family:var(--font-mono);font-size:13px;color:var(--ink-soft)}
+.ft-opt b{font-weight:500;margin-right:5px}
+.ft-yes{color:var(--good)}
+.ft-no{color:var(--ink-soft);opacity:.75}
+.ft-req{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);
+  margin:0 0 9px;line-height:1.65}
+.ft-req b{color:var(--ink);font-weight:500}
+.ft-warn{color:var(--tight)}
+.ft-note,.ft-cloud,.ft-blocked{font-size:13.5px;color:var(--ink-soft);margin:0 0 8px;max-width:64ch}
+.ft-note b{color:var(--ink)}
+.ft-cloud{color:var(--signal)}
+.ft-blocked{color:var(--tight)}
+.ft-prov{font-family:var(--font-mono);font-size:10.5px;color:var(--ink-soft);opacity:.7;margin:0}
+
 .next{margin-top:38px;background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:22px}
 .next h4{font-family:var(--font-display);margin:0 0 10px;font-size:16px}
 .next ol{margin:0;padding-left:20px;font-size:14.5px;color:var(--ink-soft)}
@@ -797,6 +818,36 @@ M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
   laptop GPU, a 32B on Apple Silicon, an 8B on DDR5 with no GPU. That is calibration against anecdote, not
   measurement, which is exactly why the validation section below matters.</p>
 
+  <h4>Fine-tuning</h4>
+  <p class="fmap">↑ a second engine, not an extension of the first</p>
+  <p>Training shares none of the arithmetic above. It cannot use the Q4_K_M file at all — that is an
+  inference format — so it works from parameter count rather than size on disk, and the memory it needs is
+  made of different parts: weights at training precision, gradients, optimiser state, and activations in
+  place of a KV cache.</p>
+  <div class="formula">full FT = p × 16 bytes    bf16 weights 2 + bf16 grads 2 + fp32 Adam m,v 8 + fp32 master 4
+LoRA    = p × 2  bytes  + adapter + activations   base frozen, no grads or optimiser state for it
+QLoRA   = p × 0.55      + adapter + activations   NF4 4-bit plus quantisation constants
+
+adapter     = p × 0.004 × 12 bytes    rank-32 on attention projections
+activations ≈ 0.05p + 0.5 GB          seq 2048, batch 1, gradient checkpointing
+disk        = p × 2 GB                bf16 weights, for BOTH paths</div>
+  <p>Three consequences are worth stating outright. <b>Full fine-tuning is not possible on a laptop for any
+  model here</b> — even a 1.7B needs about 27 GB, and a 12B needs nearer 190 GB. <b>The disk figure is the
+  one that surprises people:</b> a 4-bit run still downloads the bf16 weights first, so fine-tuning the 27B
+  needs 54 GB of free space even though it only occupies 19 GB of graphics memory. And <b>a
+  mixture-of-experts model gives nothing back here</b> — every expert must be resident and updated, so
+  memory follows the total parameter count, not the active one.</p>
+  <p>Unlike inference, training does not split across graphics and system memory: there is no laptop-viable
+  equivalent of layer offload, so the budget is the fast tier alone. That makes the verdict much more binary,
+  and much more dependent on which machine you are on. <b>QLoRA as commonly meant is CUDA-only</b> —
+  bitsandbytes has no Metal backend — so on Apple Silicon the 4-bit path is MLX's own implementation, named
+  separately here because it is a different stack. Intel Macs, AMD laptops and machines without a dedicated
+  card get no local path at all, and are told so rather than given a number.</p>
+  <p><b>These figures are calculated, not measured.</b> The bytes-per-parameter constants are standard and
+  checkable; the activation heuristic and the fit thresholds are not calibrated against anything, and there
+  are no validation anchors for them of the kind the speed estimates have. They are shown in a quieter visual
+  register for that reason, and should be read as an order of magnitude rather than a specification.</p>
+
   <h4>Where each figure comes from</h4>
   <table class="srctable">
     <thead><tr><th>Figure</th><th>Provenance</th><th>Status</th></tr></thead>
@@ -806,6 +857,8 @@ M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
       <tr><td>KV cache per 1k tokens</td><td>Derived from layer count, KV heads and head dimension in <code>config.json</code></td><td><span class="badge b-calc">calculated</span></td></tr>
       <tr><td>Memory budgets</td><td>Heuristic, tuned to leave a usable system</td><td><span class="badge b-calc">calculated</span></td></tr>
       <tr><td>Efficiency constant</td><td>Heuristic, from typical observed vs theoretical throughput</td><td><span class="badge b-calc">calculated</span></td></tr>
+      <tr><td>Fine-tuning bytes per parameter</td><td>Standard mixed-precision Adam and NF4 accounting</td><td><span class="badge b-calc">calculated</span></td></tr>
+      <tr><td>Training activation estimate</td><td>Heuristic, uncalibrated — no measurement behind it</td><td><span class="badge b-ed">editorial</span></td></tr>
       <tr><td>Task suitability scores</td><td>Author's judgement, informed by public benchmarks</td><td><span class="badge b-ed">editorial</span></td></tr>
       <tr><td>Model descriptions</td><td>Author's judgement</td><td><span class="badge b-ed">editorial</span></td></tr>
     </tbody>
@@ -826,8 +879,10 @@ M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
     <li><b>Layer granularity</b>
       Offload is modelled as a continuous fraction. Real runtimes move whole layers, so actual splits land on
       discrete steps near the estimate.</li>
-    <li><b>Inference only</b>
-      Fine-tuning or training needs several times this much memory. Nothing here applies to it.</li>
+    <li><b>Training time</b>
+      The fine-tuning block answers whether a run <i>fits</i>, never how long it takes. On a laptop, expect a
+      LoRA run over a few thousand examples to take hours rather than minutes, and scale from there. Fitting
+      and finishing are different questions.</li>
     <li><b>Speculative decoding, batching and multi-GPU</b>
       All unmodelled. Each can move throughput substantially away from these figures.</li>
   </ul>
@@ -891,7 +946,7 @@ M_gpu = 0.35  MoE, 1.00 dense            M_cpu = 1.12  MoE, 1.00 dense</div>
    checklist at the top of this file.
    ============================================================ */
 const DATA = {
-  version: "0.6.0",
+  version: "0.7.0",
   updated: "2026-07-25",
 
   /* GB/s. VERIFIED against Apple tech specs / newsroom, July 2026.
@@ -963,67 +1018,67 @@ const DATA = {
      Rebuilt 25 Jul 2026. Sizes marked [v] verified against a Hugging Face file
      listing; others derived from published memory requirements and flagged below. */
   models: [
-    {id:"gemma4-e2b", name:"Gemma 4 E2B", params:"2.3B effective", size:1.5, kv1k:0.02, oh:0.4,
+    {id:"gemma4-e2b", name:"Gemma 4 E2B", params:"2.3B effective", p:5, size:1.5, kv1k:0.02, oh:0.4,
      hf:"unsloth/gemma-4-E2B-it-GGUF", ollama:"gemma4:e2b",
      blurb:"Built for phones and thin laptops. Takes text, images and audio, which is remarkable at this size.",
      tags:["tiny","vision","audio"], s:{general:2,coding:1,docs:2,writing:2,agents:2,multi:3,vision:3}},
 
-    {id:"qwen3-1.7b", name:"Qwen3 1.7B", params:"1.7B", size:1.3, kv1k:0.03, oh:0.4,
+    {id:"qwen3-1.7b", name:"Qwen3 1.7B", params:"1.7B", p:1.7, size:1.3, kv1k:0.03, oh:0.4,
      hf:"ggml-org/Qwen3-1.7B-GGUF", ollama:"qwen3:1.7b",
      blurb:"Small, quick and multilingual. Good for classification, tagging and short rewrites.",
      tags:["tiny"], s:{general:2,coding:2,docs:2,writing:2,agents:2,multi:3,vision:0}},
 
-    {id:"llama3.2-3b", name:"Llama 3.2 3B", params:"3B", size:2.0, kv1k:0.05, oh:0.6,
+    {id:"llama3.2-3b", name:"Llama 3.2 3B", params:"3B", p:3.2, size:2.0, kv1k:0.05, oh:0.6,
      hf:"bartowski/Llama-3.2-3B-Instruct-GGUF", ollama:"llama3.2:3b",
      blurb:"An older generation, but still the most widely supported model at this size.",
      tags:["small","well-supported"], s:{general:3,coding:2,docs:3,writing:3,agents:2,multi:3,vision:0}},
 
-    {id:"gemma4-e4b", name:"Gemma 4 E4B", params:"4.5B effective", size:2.8, kv1k:0.03, oh:0.6,
+    {id:"gemma4-e4b", name:"Gemma 4 E4B", params:"4.5B effective", p:8, size:2.8, kv1k:0.03, oh:0.6,
      blurb:"The smallest model here that behaves like a real assistant. Reads images and audio.",
      hf:"unsloth/gemma-4-E4B-it-GGUF", ollama:"gemma4:e4b",
      tags:["small","vision","audio"], s:{general:3,coding:3,docs:3,writing:3,agents:3,multi:4,vision:4}},
 
-    {id:"gemma4-12b", name:"Gemma 4 12B", params:"12B", size:7.0, kv1k:0.08, oh:1.1,
+    {id:"gemma4-12b", name:"Gemma 4 12B", params:"12B", p:12, size:7.0, kv1k:0.08, oh:1.1,
      hf:"lmstudio-community/gemma-4-12B-it-GGUF", ollama:"gemma4:12b",
      blurb:"Feeds images and audio straight into the model with no separate encoder. Designed to be the all-round pick for a 16 GB laptop.",
      tags:["vision","audio","all-rounder"], s:{general:4,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
 
-    {id:"qwen35-9b", name:"Qwen3.5 9B", params:"9B", size:5.8, kv1k:0.07, oh:1.0,
+    {id:"qwen35-9b", name:"Qwen3.5 9B", params:"9B", p:9, size:5.8, kv1k:0.07, oh:1.0,
      hf:"unsloth/Qwen3.5-9B-GGUF", ollama:"qwen3.5:9b",
      blurb:"Hybrid attention design that keeps the memory needed for long conversations unusually low. A current-generation option in a size band the big families have mostly skipped.",
      tags:["long context","efficient"], s:{general:4,coding:4,docs:5,writing:4,agents:4,multi:5,vision:0}},
 
-    {id:"phi4-14b", name:"Phi-4 14B", params:"14B", size:9.1, kv1k:0.21, oh:1.4,
+    {id:"phi4-14b", name:"Phi-4 14B", params:"14B", p:14.7, size:9.1, kv1k:0.21, oh:1.4,
      hf:"microsoft/phi-4-gguf", ollama:"phi4",
      blurb:"An older generation, kept because it is the best-supported model in the thin 9–16 GB band. Strong on reasoning and maths for its footprint.",
      tags:["reasoning"], s:{general:4,coding:4,docs:4,writing:3,agents:4,multi:3,vision:0}},
 
-    {id:"gemma4-26b-a4b", name:"Gemma 4 26B-A4B", params:"26B / 3.8B active", size:16.9, kv1k:0.10, oh:1.8,
+    {id:"gemma4-26b-a4b", name:"Gemma 4 26B-A4B", params:"26B / 3.8B active", p:26, size:16.9, kv1k:0.10, oh:1.8,
      act:3.8/26, hf:"unsloth/gemma-4-26B-A4B-it-GGUF", ollama:"gemma4:26b",
      blurb:"Mixture of experts with 128 small experts — needs memory like a 26B but generates near the speed of a 4B. Reads images.",
      tags:["MoE","vision","fast for size"], s:{general:5,coding:4,docs:5,writing:5,agents:5,multi:5,vision:5}},
 
-    {id:"qwen36-27b", name:"Qwen3.6 27B", params:"27B", size:16.8, kv1k:0.14, oh:1.9,
+    {id:"qwen36-27b", name:"Qwen3.6 27B", params:"27B", p:27, size:16.8, kv1k:0.14, oh:1.9,
      hf:"unsloth/Qwen3.6-27B-GGUF", ollama:"qwen3.6:27b",
      blurb:"The current default for local coding and agent work — it beats the previous generation's 397B flagship on coding benchmarks. Dense, so no routing surprises, and it reads images.",
      tags:["coding","vision","agents"], s:{general:5,coding:5,docs:5,writing:4,agents:5,multi:5,vision:4}},
 
-    {id:"gemma4-31b", name:"Gemma 4 31B", params:"31B", size:18.0, kv1k:0.12, oh:2.0,
+    {id:"gemma4-31b", name:"Gemma 4 31B", params:"31B", p:31, size:18.0, kv1k:0.12, oh:2.0,
      hf:"unsloth/gemma-4-31B-it-GGUF", ollama:"gemma4:31b",
      blurb:"The strongest dense Gemma. Best writing quality that still fits a well-specified laptop.",
      tags:["writing","vision"], s:{general:5,coding:4,docs:5,writing:5,agents:4,multi:5,vision:5}},
 
-    {id:"qwen36-35b-a3b", name:"Qwen3.6 35B-A3B", params:"35B / 3B active", size:21.0, kv1k:0.10, oh:2.1,
+    {id:"qwen36-35b-a3b", name:"Qwen3.6 35B-A3B", params:"35B / 3B active", p:35, size:21.0, kv1k:0.10, oh:2.1,
      act:3/35, hf:"unsloth/Qwen3.6-35B-A3B-GGUF", ollama:"qwen3.6:35b-a3b",
      blurb:"Mixture of experts with only 3B active per token. Pick this over the 27B when you want speed and have several applications open; pick the 27B when coding quality matters most.",
      tags:["MoE","vision","fast for size"], s:{general:5,coding:4,docs:5,writing:4,agents:5,multi:5,vision:4}},
 
-    {id:"llama33-70b", name:"Llama 3.3 70B", params:"70B", size:42.5, kv1k:0.33, oh:3.0,
+    {id:"llama33-70b", name:"Llama 3.3 70B", params:"70B", p:70, size:42.5, kv1k:0.33, oh:3.0,
      hf:"bartowski/Llama-3.3-70B-Instruct-GGUF", ollama:"llama3.3:70b",
      blurb:"Still strong on general knowledge and instruction following, but a 27B from 2026 now matches it on most tasks at a third of the memory.",
      tags:["dense","legacy flagship"], s:{general:5,coding:4,docs:5,writing:5,agents:4,multi:4,vision:0}},
 
-    {id:"llama4-scout", name:"Llama 4 Scout", params:"109B / 17B active", size:55.0, kv1k:0.10, oh:4.0,
+    {id:"llama4-scout", name:"Llama 4 Scout", params:"109B / 17B active", p:109, size:55.0, kv1k:0.10, oh:4.0,
      act:17/109, hf:"unsloth/Llama-4-Scout-17B-16E-Instruct-GGUF", ollama:"llama4:scout",
      blurb:"Sixteen large experts and a very long context window. The memory cost follows the full 109B, which is why it needs a workstation despite activating only 17B per token.",
      tags:["MoE","very long context","vision"], s:{general:4,coding:3,docs:5,writing:4,agents:4,multi:3,vision:4}}
@@ -1198,6 +1253,86 @@ function evaluate(m, rig, ctxK){
   return {m, need, kv, verdict, f, tps, vramUsed};
 }
 
+/* ============================================================
+   FINE-TUNING
+   A second engine, not an extension of the first. Inference reads a Q4_K_M
+   GGUF; training cannot use that file at all. It needs the bf16 weights, plus
+   gradients, plus optimiser state, plus activations — none of which appear in
+   the inference formula. So this works from PARAMETER COUNT (m.p), not from
+   file size on disk.
+
+   Everything here is CALCULATED, NOT MEASURED. The bytes-per-parameter figures
+   are standard and defensible; the activation heuristic and the thresholds are
+   not calibrated against anything. Kept in its own visual register in the
+   report for that reason.
+   ============================================================ */
+const TRAIN = {
+  /* bytes per parameter */
+  full:  16,    /* bf16 weights 2 + bf16 grads 2 + fp32 Adam m,v 8 + fp32 master 4 */
+  lora:  2,     /* base frozen at bf16, no grads and no optimiser state for it */
+  qlora: 0.55,  /* NF4 4-bit + per-block quantisation constants */
+  adapterFrac:  0.004,  /* rank-32 LoRA on attention projections ~ 0.4% of base */
+  adapterBytes: 12,     /* bf16 weight 2 + bf16 grad 2 + fp32 Adam m,v 8 */
+  fp16Disk: 2,          /* both LoRA and QLoRA download bf16 weights first */
+  seq: 2048, batch: 1
+};
+
+/* Activations with gradient checkpointing at seq 2048, batch 1. Scales with
+   layers x hidden, which tracks p^(2/3) more closely than p — the linear fit
+   below is a deliberate over-estimate at the large end. HEURISTIC. */
+function actGB(p){ return 0.05*p + 0.5; }
+
+function trainNeed(m){
+  const p = m.p, act = actGB(p);
+  const adapter = p * TRAIN.adapterFrac * TRAIN.adapterBytes;
+  return {
+    p,
+    full:  p*TRAIN.full  + act,
+    lora:  p*TRAIN.lora  + adapter + act + 1.0,
+    qlora: p*TRAIN.qlora + adapter + act + 1.0,
+    disk:  p*TRAIN.fp16Disk,
+    ram:   Math.max(8, p*0.3)   /* host side: loader, dataset, checkpoint writes */
+  };
+}
+
+/* Which cloud tier would take this job, when the laptop cannot. */
+function cloudTier(gb){
+  if(gb <= 15) return "a free Colab or Kaggle T4 (16 GB)";
+  if(gb <= 22) return "a Colab L4 (24 GB)";
+  if(gb <= 39) return "a Colab Pro A100 (40 GB)";
+  if(gb <= 78) return "an A100 or H100 (80 GB)";
+  return "more than one 80 GB GPU";
+}
+
+function trainPlan(m, rig){
+  const n = trainNeed(m);
+  /* Training does not split across GPU and system memory the way inference
+     does — there is no laptop-viable equivalent of layer offload — so the
+     budget is the fast tier alone, not vram + sys. */
+  const budget = rig.vram;
+  const appleSilicon = state.os==="mac" && rig.unified;
+
+  if(state.os==="mac" && !rig.unified)
+    return {n, blocked:"Intel Macs have no usable training backend. Nothing here is possible locally."};
+  if(budget <= 0)
+    return {n, blocked:"Fine-tuning needs a dedicated graphics card. Built-in graphics and CPU-only training are possible in principle and take weeks in practice."};
+  if(state.series === "amd")
+    return {n, blocked:"ROCm support on laptop Radeon parts is not reliable enough to estimate. Treat local fine-tuning as unavailable."};
+
+  /* bitsandbytes NF4 is CUDA-only. On Apple Silicon the equivalent is MLX's
+     own 4-bit LoRA, which is real but a different stack with different
+     behaviour — so it gets a different name rather than being called QLoRA. */
+  return {
+    n, budget, appleSilicon,
+    q4label: appleSilicon ? "4-bit LoRA (MLX)" : "QLoRA",
+    stack:   appleSilicon ? "mlx-lm" : "Unsloth or PEFT + bitsandbytes",
+    lora:    n.lora  <= budget,
+    qlora:   n.qlora <= budget,
+    diskOk:  n.disk  <= +state.disk,
+    ramOk:   n.ram   <= +state.ram
+  };
+}
+
 function build(){
   const rig  = computeRig();
   const ctxK = +state.ctx;
@@ -1280,6 +1415,50 @@ function speedWord(t){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
+function trainBlock(m, rig){
+  if(!m.p) return "";
+  const t = trainPlan(m, rig), n = t.n;
+  const g = x => x.toFixed(x < 10 ? 1 : 0);
+
+  /* Full fine-tuning is "no" for every model on every laptop. Stated as a plain
+     sentence with the number rather than a red verdict — the magnitude is the
+     informative part, and thirteen red marks would just be noise. */
+  const full = `<p class="ft-note">Full fine-tuning needs roughly <b>${g(n.full)} GB</b> — weights,
+    gradients and optimiser state together run to about 16 bytes per parameter. That is beyond any
+    laptop, for every model on this list.</p>`;
+  const prov = who => `<p class="ft-prov">${esc(who)} · seq 2048, batch 1, gradient checkpointing ·
+    calculated, not measured</p>`;
+
+  if(t.blocked){
+    return `<div class="ft"><div class="ft-l">Fine-tuning on this machine</div>
+      <p class="ft-blocked">${esc(t.blocked)}</p>${full}
+      <p class="ft-cloud">Elsewhere: 4-bit LoRA on this model needs about ${g(n.qlora)} GB of GPU
+      memory and ${g(n.disk)} GB of disk — ${esc(cloudTier(n.qlora))}.</p>
+      ${prov("no local path")}</div>`;
+  }
+
+  const opt = (label, ok, need) =>
+    `<span class="ft-opt"><b class="${ok?"ft-yes":"ft-no"}">${esc(label)} ${ok?"✓":"✗"}</b> ${g(need)} GB</span>`;
+
+  const cloud = (t.lora || t.qlora) ? "" :
+    `<p class="ft-cloud">Neither fits in ${g(t.budget)} GB. At ${g(n.qlora)} GB, the 4-bit path would
+     need ${esc(cloudTier(n.qlora))}.</p>`;
+
+  const warn = [];
+  if(!t.diskOk) warn.push(`the ${g(n.disk)} GB of bf16 weights exceeds your free disk`);
+  if(!t.ramOk)  warn.push(`wants ~${g(n.ram)} GB system RAM`);
+
+  return `<div class="ft">
+    <div class="ft-l">Fine-tuning on this machine</div>
+    <div class="ft-grid">${opt("LoRA", t.lora, n.lora)}${opt(t.q4label, t.qlora, n.qlora)}</div>
+    <p class="ft-req">${t.appleSilicon?"unified memory":"GPU memory"} you have <b>${g(t.budget)} GB</b>
+      · disk needed <b>${g(n.disk)} GB</b> (bf16 weights, not the Q4 file)
+      · system RAM <b>${g(n.ram)} GB</b>${warn.length?` · <span class="ft-warn">${esc(warn.join("; "))}</span>`:""}</p>
+    ${full}${cloud}
+    ${prov(t.stack)}
+  </div>`;
+}
+
 function render(elId, rows, rig, emptyMsg){
   const el = document.getElementById(elId);
   if(!rows.length){ el.innerHTML = `<p class="empty">${esc(emptyMsg)}</p>`; return; }
@@ -1339,6 +1518,7 @@ function render(elId, rows, rig, emptyMsg){
         <span class="tag ed">suitability: editorial</span>
       </div>
       ${links}
+      ${r.verdict==="no" ? "" : trainBlock(r.m, rig)}
     </div>`;
   }).join("");
 }

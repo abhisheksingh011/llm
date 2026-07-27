@@ -52,9 +52,43 @@ which Apple menu, which Device Manager entry. **No terminal.** Then:
   speed follows active ones
 - **Partial offload as a continuous split**, not a cliff, because "70% on the GPU"
   is the situation most laptops are actually in
+- **Can you *train* it, not just run it** — per model, whether LoRA or 4-bit LoRA
+  fits, with the GPU, RAM and disk each would take, and which cloud tier to use
+  when the laptop can't
 - **Every number checkable.** The methodology section labels each input published,
   calculated or editorial, and publishes the measured-vs-predicted table so you can
   see the residuals instead of taking the constants on faith
+
+## Fine-tuning, too
+
+Running a model and training one are different questions with different arithmetic,
+so the page answers both. Training can't use the Q4_K_M file at all — it's an
+inference format — so this works from parameter count:
+
+```
+full FT = p × 16 bytes   (bf16 weights + grads + fp32 Adam + master)
+LoRA    = p × 2  + adapter + activations
+QLoRA   = p × 0.55 + adapter + activations
+disk    = p × 2 GB       for BOTH paths
+```
+
+Three things fall out that people consistently get wrong:
+
+- **Full fine-tuning is impossible on any laptop, for any model.** Even a 1.7B needs
+  ~27 GB. A 12B needs ~190 GB.
+- **The disk figure is the trap.** A 4-bit run still downloads the bf16 weights
+  first, so fine-tuning a 27B needs **54 GB of free disk** even though it only
+  occupies 19 GB of VRAM.
+- **QLoRA is CUDA-only.** bitsandbytes has no Metal backend, so on Apple Silicon
+  the 4-bit path is MLX's own implementation — named separately, because it's a
+  different stack. Intel Macs, AMD laptops and machines with no dedicated card get
+  told there's no local path rather than given a fake number.
+
+Unlike inference, training doesn't split across GPU and system memory, so the
+verdict is binary and depends heavily on which machine you're on. These figures are
+**calculated, not measured** — the bytes-per-parameter constants are standard, but
+the activation heuristic has no validation anchors behind it, and the page shows
+them in a quieter visual register to say so.
 
 ## How it works
 
